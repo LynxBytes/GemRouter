@@ -11,30 +11,43 @@ import (
 
 type GemRouter struct {
 	mux         *http.ServeMux
-	middlewares []Middleware
-	notFound    GemHandler
+	Addr        string
+	Port        string
+	Middlewares []Middleware
+	NotFound    GemHandler
+	Health      GemHandler
 }
 
 func NewGemRouter() *GemRouter {
 	return &GemRouter{
-		mux: http.NewServeMux(),
-		middlewares: []Middleware{
+		mux:  http.NewServeMux(),
+		Addr: "0.0.0.0",
+		Port: ":8080",
+		Middlewares: []Middleware{
 			Recovery,
 			Logger,
+		},
+		NotFound: func(ctx *GemContext) {
+			ctx.NOTFOUND()
+		},
+		Health: func(ctx *GemContext) {
+			ctx.OK()
 		},
 	}
 }
 
-func CustomGemRouter(middlewares []Middleware, notFound GemHandler) *GemRouter {
-	return &GemRouter{
-		mux:         http.NewServeMux(),
-		middlewares: middlewares,
-		notFound:    notFound,
+func CustomGemRouter(configs ...GemConfig) *GemRouter {
+	r := NewGemRouter()
+
+	for _, opt := range configs {
+		opt(r)
 	}
+
+	return r
 }
 
 func (r *GemRouter) Use(m Middleware) {
-	r.middlewares = append(r.middlewares, m)
+	r.Middlewares = append(r.Middlewares, m)
 }
 
 func (r *GemRouter) GET(pattern string, handler GemHandler) {
@@ -58,12 +71,12 @@ func (r *GemRouter) DELETE(pattern string, handler GemHandler) {
 }
 
 func (r *GemRouter) NoRoute(handler GemHandler) {
-	r.notFound = handler
+	r.NotFound = handler
 	r.mux.HandleFunc("/", func(response http.ResponseWriter, req *http.Request) {
 		if req.URL.Path != "/" {
 			rw := &responseWriter{ResponseWriter: response}
 			ctx := &GemContext{Writer: rw, Request: req, Keys: make(map[string]any), rw: rw}
-			finalHandler := next(r.notFound, r.middlewares)
+			finalHandler := next(r.NotFound, r.Middlewares)
 			finalHandler(ctx)
 			return
 		}
@@ -71,8 +84,11 @@ func (r *GemRouter) NoRoute(handler GemHandler) {
 	})
 }
 
-func (r *GemRouter) Run(addr string) error {
-	srv := &http.Server{Addr: addr, Handler: r.mux}
+func (r *GemRouter) Run() error {
+	r.GET("/health", r.Health)
+	r.NoRoute(r.NotFound)
+
+	srv := &http.Server{Addr: r.Addr + r.Port, Handler: r.mux}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -107,8 +123,8 @@ func (r *GemRouter) handle(method, pattern string, handler GemHandler, extra ...
 			Keys:    make(map[string]any),
 			rw:      rw,
 		}
-		all := make([]Middleware, 0, len(r.middlewares)+len(extra))
-		all = append(all, r.middlewares...)
+		all := make([]Middleware, 0, len(r.Middlewares)+len(extra))
+		all = append(all, r.Middlewares...)
 		all = append(all, extra...)
 		finalHandler := next(handler, all)
 		finalHandler(ctx)

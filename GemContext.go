@@ -73,6 +73,12 @@ func (context *GemContext) OK() {
 	})
 }
 
+func (context *GemContext) NOTFOUND() {
+	context.ToJSON(http.StatusNotFound, map[string]string{
+		"error": "page not found",
+	})
+}
+
 func (context *GemContext) Query(key string) string {
 	return context.Request.URL.Query().Get(key)
 }
