@@ -57,7 +57,6 @@ type GemContext struct {
 	Request    *http.Request
 	Store      *ContextStore
 	Logger     GemLogger
-	Aborted    bool
 	rw         *responseWriter
 	rwBuf      responseWriter
 	trustProxy bool

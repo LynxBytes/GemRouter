@@ -16,10 +16,12 @@ type GemRouter struct {
 	Addr            string
 	Port            string
 	middlewares     []Middleware
-	baseChain       GemHandler
 	NotFound        GemHandler
 	Health          GemHandler
 	shutdownTimeout time.Duration
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
+	idleTimeout     time.Duration
 	corsSet         bool
 	logger          GemLogger
 	trustProxy      bool
@@ -37,25 +39,16 @@ func BasicGemRouter() *GemRouter {
 		Addr:            "0.0.0.0",
 		Port:            "8080",
 		shutdownTimeout: 5 * time.Second,
+		readTimeout:     30 * time.Second,
+		writeTimeout:    30 * time.Second,
+		idleTimeout:     120 * time.Second,
 		middlewares:     []Middleware{Cors(defaultCors), Recovery},
 		corsSet:         true,
 		logger:          defaultGemLogger,
-		NotFound: func(ctx *GemContext) {
-			ctx.NOTFOUND()
-		},
-		Health: func(ctx *GemContext) {
-			ctx.OK()
-		},
+		NotFound:        func(ctx *GemContext) { ctx.NOTFOUND() },
+		Health:          func(ctx *GemContext) { ctx.OK() },
 	}
-
-	r.ctxPool = sync.Pool{
-		New: func() any {
-			return &GemContext{
-				Store: &ContextStore{},
-			}
-		},
-	}
-
+	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
 	return r
 }
 
@@ -65,24 +58,16 @@ func DefaultGemRouter() *GemRouter {
 		Addr:            "0.0.0.0",
 		Port:            "8080",
 		shutdownTimeout: 5 * time.Second,
+		readTimeout:     30 * time.Second,
+		writeTimeout:    30 * time.Second,
+		idleTimeout:     120 * time.Second,
 		middlewares:     []Middleware{Cors(defaultCors), Recovery, Logger},
 		corsSet:         true,
 		logger:          defaultGemLogger,
-		NotFound: func(ctx *GemContext) {
-			ctx.NOTFOUND()
-		},
-		Health: func(ctx *GemContext) {
-			ctx.OK()
-		},
+		NotFound:        func(ctx *GemContext) { ctx.NOTFOUND() },
+		Health:          func(ctx *GemContext) { ctx.OK() },
 	}
-	r.ctxPool = sync.Pool{
-		New: func() any {
-			return &GemContext{
-				Store: &ContextStore{},
-			}
-		},
-	}
-
+	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
 	return r
 }
 
@@ -92,23 +77,16 @@ func NewGemRouter(configs ...GemConfig) *GemRouter {
 		Addr:            "0.0.0.0",
 		Port:            "8080",
 		shutdownTimeout: 5 * time.Second,
+		readTimeout:     30 * time.Second,
+		writeTimeout:    30 * time.Second,
+		idleTimeout:     120 * time.Second,
 		middlewares:     []Middleware{Recovery, Logger},
 		corsSet:         false,
 		logger:          defaultGemLogger,
-		NotFound: func(ctx *GemContext) {
-			ctx.NOTFOUND()
-		},
-		Health: func(ctx *GemContext) {
-			ctx.OK()
-		},
+		NotFound:        func(ctx *GemContext) { ctx.NOTFOUND() },
+		Health:          func(ctx *GemContext) { ctx.OK() },
 	}
-	r.ctxPool = sync.Pool{
-		New: func() any {
-			return &GemContext{
-				Store: &ContextStore{},
-			}
-		},
-	}
+	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
 
 	for _, opt := range configs {
 		opt(r)
@@ -161,7 +139,13 @@ func (r *GemRouter) Run() error {
 	r.GET("/health", r.Health)
 	r.NoRoute(r.NotFound)
 
-	srv := &http.Server{Addr: r.Addr + ":" + r.Port, Handler: r.mux}
+	srv := &http.Server{
+		Addr:         r.Addr + ":" + r.Port,
+		Handler:      r.mux,
+		ReadTimeout:  r.readTimeout,
+		WriteTimeout: r.writeTimeout,
+		IdleTimeout:  r.idleTimeout,
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -188,18 +172,14 @@ func (r *GemRouter) Group(prefix string, middlewares ...Middleware) *GemGroup {
 
 func (r *GemRouter) newContext(response http.ResponseWriter, req *http.Request) *GemContext {
 	ctx := r.ctxPool.Get().(*GemContext)
-
 	ctx.Request = req
 	ctx.Logger = r.logger
 	ctx.trustProxy = r.trustProxy
-
 	ctx.rwBuf.ResponseWriter = response
 	ctx.rwBuf.status = 0
 	ctx.rwBuf.written = false
 	ctx.rw = &ctx.rwBuf
-
 	ctx.Writer = ctx.rw
-
 	return ctx
 }
 
@@ -209,7 +189,6 @@ func (r *GemRouter) releaseContext(ctx *GemContext) {
 		ctx.Store.UserID = ""
 		clear(ctx.Store.data)
 	}
-	ctx.Aborted = false
 	ctx.rwBuf.ResponseWriter = nil
 	ctx.rwBuf.status = 0
 	ctx.rwBuf.written = false
@@ -229,13 +208,11 @@ func (r *GemRouter) handle(method, pattern string, handler GemHandler, extra ...
 }
 
 func buildChain(handler GemHandler, base []Middleware, extra ...Middleware) GemHandler {
-	for i := len(base) - 1; i >= 0; i-- {
-		handler = base[i](handler)
-	}
-
 	for i := len(extra) - 1; i >= 0; i-- {
 		handler = extra[i](handler)
 	}
-
+	for i := len(base) - 1; i >= 0; i-- {
+		handler = base[i](handler)
+	}
 	return handler
 }

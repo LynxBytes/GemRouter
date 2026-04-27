@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,27 +32,35 @@ func Recovery(next GemHandler) GemHandler {
 	}
 }
 
+var logFieldsPool = sync.Pool{
+	New: func() any { return make(map[string]any, 8) },
+}
+
 func Logger(next GemHandler) GemHandler {
 	return func(ctx *GemContext) {
 		start := time.Now()
 		reqID := newRequestID()
 		ctx.Store.RequestID = reqID
 
-		ctx.Logger.Info("→", map[string]any{
-			"request_id": reqID,
-			"method":     ctx.Request.Method,
-			"path":       ctx.Request.URL.Path,
-			"ip":         clientIP(ctx.Request, ctx.trustProxy),
-			"user_agent": ctx.Request.UserAgent(),
-		})
+		in := logFieldsPool.Get().(map[string]any)
+		in["request_id"] = reqID
+		in["method"] = ctx.Request.Method
+		in["path"] = ctx.Request.URL.Path
+		in["ip"] = clientIP(ctx.Request, ctx.trustProxy)
+		in["user_agent"] = ctx.Request.UserAgent()
+		ctx.Logger.Info("→", in)
+		clear(in)
+		logFieldsPool.Put(in)
 
 		next(ctx)
 
-		ctx.Logger.Info("←", map[string]any{
-			"request_id": reqID,
-			"status":     ctx.StatusCode(),
-			"latency":    time.Since(start).String(),
-		})
+		out := logFieldsPool.Get().(map[string]any)
+		out["request_id"] = reqID
+		out["status"] = ctx.StatusCode()
+		out["latency"] = time.Since(start).String()
+		ctx.Logger.Info("←", out)
+		clear(out)
+		logFieldsPool.Put(out)
 	}
 }
 

@@ -106,3 +106,21 @@ func WithTrustedProxy() GemConfig {
 		router.trustProxy = true
 	}
 }
+
+func WithReadTimeout(d time.Duration) GemConfig {
+	return func(router *GemRouter) {
+		router.readTimeout = d
+	}
+}
+
+func WithWriteTimeout(d time.Duration) GemConfig {
+	return func(router *GemRouter) {
+		router.writeTimeout = d
+	}
+}
+
+func WithIdleTimeout(d time.Duration) GemConfig {
+	return func(router *GemRouter) {
+		router.idleTimeout = d
+	}
+}
