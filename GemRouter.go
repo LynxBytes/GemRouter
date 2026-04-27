@@ -31,6 +31,7 @@ type GemRouter struct {
 	writeTimeout      time.Duration
 	idleTimeout       time.Duration
 	corsSet           bool
+	stdout            *rawModeWriter
 	logger            *slog.Logger
 	logCloser         io.Closer
 	trustProxy        bool
@@ -54,6 +55,7 @@ func newHTTPRouter() *httprouter.Router {
 }
 
 func newBaseRouter() *GemRouter {
+	stdout := &rawModeWriter{w: os.Stdout}
 	r := &GemRouter{
 		mux:               newHTTPRouter(),
 		name:              "GemRouter Server",
@@ -64,7 +66,8 @@ func newBaseRouter() *GemRouter {
 		readTimeout:       30 * time.Second,
 		writeTimeout:      30 * time.Second,
 		idleTimeout:       120 * time.Second,
-		logger:            defaultGemLogger,
+		stdout:            stdout,
+		logger:            newDefaultLogger(stdout),
 		responseFormatter: defaultResponseFormatter,
 		errorFormatter:    defaultErrorFormatter,
 		NotFound:          func(ctx *GemContext) { ctx.NOTFOUND() },
@@ -73,6 +76,10 @@ func newBaseRouter() *GemRouter {
 	}
 	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
 	return r
+}
+
+func (r *GemRouter) ConsoleWriter() io.Writer {
+	return r.stdout
 }
 
 func BasicGemRouter() *GemRouter {
@@ -161,32 +168,27 @@ func (r *GemRouter) Run() error {
 	signal.Notify(termCh, syscall.SIGTERM)
 	defer signal.Stop(termCh)
 
-	// inputCh carries keyboard events from raw terminal mode.
-	type termEvent uint8
-	const (
-		evCtrlC termEvent = iota
-		evCtrlR
-	)
-	inputCh := make(chan termEvent, 1)
-
 	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
 	var restoreTerm func()
+
+	inputCh := make(chan struct{}, 1)
 
 	if isTTY {
 		old, err := term.MakeRaw(int(os.Stdin.Fd()))
 		if err == nil {
-			restoreTerm = func() { _ = term.Restore(int(os.Stdin.Fd()), old) }
+			r.stdout.raw.Store(true)
+			restoreTerm = func() {
+				r.stdout.raw.Store(false)
+				_ = term.Restore(int(os.Stdin.Fd()), old)
+			}
 			go func() {
 				b := make([]byte, 1)
 				for {
 					if _, err := os.Stdin.Read(b); err != nil {
 						return
 					}
-					switch b[0] {
-					case 0x03, 0x04: // Ctrl+C, Ctrl+D
-						inputCh <- evCtrlC
-					case 0x12: // Ctrl+R
-						inputCh <- evCtrlR
+					if b[0] == 0x03 || b[0] == 0x04 { // Ctrl+C, Ctrl+D
+						inputCh <- struct{}{}
 					}
 				}
 			}()
@@ -209,70 +211,54 @@ func (r *GemRouter) Run() error {
 		return err
 	}
 
-	newSrv := func() *http.Server {
-		return &http.Server{
-			Addr:         addr,
-			Handler:      r.mux,
-			ReadTimeout:  r.readTimeout,
-			WriteTimeout: r.writeTimeout,
-			IdleTimeout:  r.idleTimeout,
-		}
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r.mux,
+		ReadTimeout:  r.readTimeout,
+		WriteTimeout: r.writeTimeout,
+		IdleTimeout:  r.idleTimeout,
 	}
 
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	r.logger.Info("Server up: " + addr)
+
+	sigintCount := 0
+	var resetTimer <-chan time.Time
+
 	for {
-		srv := newSrv()
-		errCh := make(chan error, 1)
-		go func() { errCh <- srv.ListenAndServe() }()
-		r.logger.Info("Server up: " + addr)
-
-		sigintCount := 0
-		var resetTimer <-chan time.Time
-
-	inner:
-		for {
-			select {
-			case err := <-errCh:
-				if r.logCloser != nil {
-					_ = r.logCloser.Close()
-				}
-				return err
-
-			case <-termCh:
-				return doShutdown(srv)
-
-			case <-intCh:
-				sigintCount++
-				if sigintCount == 1 {
-					r.logger.Warn("Press Ctrl+C again to stop the server")
-					resetTimer = time.After(3 * time.Second)
-				} else {
-					return doShutdown(srv)
-				}
-
-			case e := <-inputCh:
-				fmt.Fprint(os.Stderr, "\r")
-				switch e {
-				case evCtrlC:
-					sigintCount++
-					if sigintCount == 1 {
-						r.logger.Warn("Press Ctrl+C again to stop the server")
-						resetTimer = time.After(3 * time.Second)
-					} else {
-						return doShutdown(srv)
-					}
-				case evCtrlR:
-					r.logger.Info("Reloading server...")
-					ctx, cancel := context.WithTimeout(context.Background(), r.shutdownTimeout)
-					_ = srv.Shutdown(ctx)
-					cancel()
-					break inner
-				}
-
-			case <-resetTimer:
-				sigintCount = 0
-				resetTimer = nil
-				r.logger.Info("Shutdown cancelled")
+		select {
+		case err := <-errCh:
+			if r.logCloser != nil {
+				_ = r.logCloser.Close()
 			}
+			return err
+
+		case <-termCh:
+			return doShutdown(srv)
+
+		case <-intCh:
+			sigintCount++
+			if sigintCount == 1 {
+				fmt.Fprint(os.Stderr, "\r\nPress Ctrl+C again to stop the server\r\n")
+				resetTimer = time.After(3 * time.Second)
+			} else {
+				return doShutdown(srv)
+			}
+
+		case <-inputCh:
+			fmt.Fprint(os.Stderr, "\r\nPress Ctrl+C again to stop the server\r\n")
+			sigintCount++
+			if sigintCount == 1 {
+				resetTimer = time.After(3 * time.Second)
+			} else {
+				return doShutdown(srv)
+			}
+
+		case <-resetTimer:
+			sigintCount = 0
+			resetTimer = nil
+			fmt.Fprint(os.Stderr, "\r\nShutdown cancelled\r\n")
 		}
 	}
 }

@@ -58,13 +58,14 @@ func WithZapFileLogger(path string, level zapcore.Level) gem.GemConfig {
 
 func WithZapTeeLogger(path string, level zapcore.Level) gem.GemConfig {
 	f := openLogFile(path)
-	w := zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), zapcore.AddSync(f))
-	z := zap.New(newZapCore(w, level))
-	configs := []gem.GemConfig{WithZapLogger(z)}
-	if f != os.Stdout {
-		configs = append(configs, gem.WithLogCloser(f))
+	return func(r *gem.GemRouter) {
+		w := zapcore.NewMultiWriteSyncer(zapcore.AddSync(r.ConsoleWriter()), zapcore.AddSync(f))
+		z := zap.New(newZapCore(w, level))
+		WithZapLogger(z)(r)
+		if f != os.Stdout {
+			gem.WithLogCloser(f)(r)
+		}
 	}
-	return combine(configs...)
 }
 
 func WithZapRotateLogger(cfg gem.LogRotateConfig, level zapcore.Level) gem.GemConfig {
@@ -81,43 +82,49 @@ func WithZapTeeRotateLogger(cfg gem.LogRotateConfig, level zapcore.Level) gem.Ge
 }
 
 func WithZapTeeWriter(w io.Writer, level zapcore.Level) gem.GemConfig {
-	ws := zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), zapcore.AddSync(w))
-	z := zap.New(newZapCore(ws, level))
-	return WithZapLogger(z)
+	return func(r *gem.GemRouter) {
+		ws := zapcore.NewMultiWriteSyncer(zapcore.AddSync(r.ConsoleWriter()), zapcore.AddSync(w))
+		z := zap.New(newZapCore(ws, level))
+		WithZapLogger(z)(r)
+	}
 }
 
 func WithZapSplitLogger(path string, level zapcore.Level) gem.GemConfig {
 	f := openLogFile(path)
-	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
-		zapcore.AddSync(os.Stdout),
-		level,
-	)
-	fileCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-		zapcore.AddSync(f),
-		level,
-	)
-	z := zap.New(zapcore.NewTee(consoleCore, fileCore))
-	configs := []gem.GemConfig{WithZapLogger(z)}
-	if f != os.Stdout {
-		configs = append(configs, gem.WithLogCloser(f))
+	return func(r *gem.GemRouter) {
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
+			zapcore.AddSync(r.ConsoleWriter()),
+			level,
+		)
+		fileCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.AddSync(f),
+			level,
+		)
+		z := zap.New(zapcore.NewTee(consoleCore, fileCore))
+		WithZapLogger(z)(r)
+		if f != os.Stdout {
+			gem.WithLogCloser(f)(r)
+		}
 	}
-	return combine(configs...)
 }
 
 func WithZapSplitRotateLogger(cfg gem.LogRotateConfig, level zapcore.Level) gem.GemConfig {
 	lj := newLumberjack(cfg)
-	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
-		zapcore.AddSync(os.Stdout),
-		level,
-	)
-	fileCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
-		zapcore.AddSync(lj),
-		level,
-	)
-	z := zap.New(zapcore.NewTee(consoleCore, fileCore))
-	return combine(WithZapLogger(z), gem.WithLogCloser(lj))
+	return func(r *gem.GemRouter) {
+		consoleCore := zapcore.NewCore(
+			zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
+			zapcore.AddSync(r.ConsoleWriter()),
+			level,
+		)
+		fileCore := zapcore.NewCore(
+			zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+			zapcore.AddSync(lj),
+			level,
+		)
+		z := zap.New(zapcore.NewTee(consoleCore, fileCore))
+		WithZapLogger(z)(r)
+		gem.WithLogCloser(lj)(r)
+	}
 }
