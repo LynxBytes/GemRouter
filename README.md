@@ -35,17 +35,19 @@ func main() {
         ctx.ToJSON(200, gemrouter.JSON{"message": "pong"})
     })
 
-    r.Run()
+    if err := GemRouter.Run(); err != nil {
+        log.Fatalf("failed to run server: %v", err)
+    }
 }
 ```
 
 ## Routers
 
-| Constructor | Middlewares | CORS |
-|---|---|---|
-| `BasicGemRouter()` | CORS, Recovery | ✓ default |
+| Constructor | Middlewares            | CORS |
+|---|------------------------|---|
+| `BasicGemRouter()` | Nothing                | ✓ default |
 | `DefaultGemRouter()` | CORS, Recovery, Logger | ✓ default |
-| `NewGemRouter(configs...)` | Recovery, Logger | configurable |
+| `NewGemRouter(configs...)` | Recovery               | configurable |
 
 ```go
 r := gemrouter.NewGemRouter(

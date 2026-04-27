@@ -66,7 +66,7 @@ func newBaseRouter() *GemRouter {
 
 func BasicGemRouter() *GemRouter {
 	r := newBaseRouter()
-	r.middlewares = []Middleware{Cors(defaultCors), Recovery}
+	r.middlewares = []Middleware{}
 	r.corsSet = true
 	return r
 }
@@ -80,7 +80,7 @@ func DefaultGemRouter() *GemRouter {
 
 func NewGemRouter(configs ...GemConfig) *GemRouter {
 	r := newBaseRouter()
-	r.middlewares = []Middleware{Recovery, Logger}
+	r.middlewares = []Middleware{Recovery}
 
 	for _, opt := range configs {
 		opt(r)
