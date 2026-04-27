@@ -1,19 +1,17 @@
-package gem_test
+package gem
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
-func newCorsServer(cfg *gemrouter.CorsConfig) *httptest.Server {
-	r := gemrouter.NewGemRouter(
-		gemrouter.WithMiddlewares([]gemrouter.Middleware{}),
-		gemrouter.WithCors(cfg),
+func newCorsServer(cfg *CorsConfig) *httptest.Server {
+	r := NewGemRouter(
+		WithMiddlewares([]Middleware{}),
+		WithCors(cfg),
 	)
-	r.GET("/", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	r.GET("/", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	return httptest.NewServer(r.Handler())
 }
 
@@ -33,7 +31,7 @@ func simpleReq(url, origin string) *http.Request {
 // --- No Origin ---
 
 func TestCorsNoOriginPassthrough(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/")
@@ -53,7 +51,7 @@ func TestCorsNoOriginPassthrough(t *testing.T) {
 // --- Allowed origin ---
 
 func TestCorsAllowedOrigin(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(simpleReq(srv.URL, "https://example.com"))
@@ -68,7 +66,7 @@ func TestCorsAllowedOrigin(t *testing.T) {
 }
 
 func TestCorsDisallowedOriginSimpleRequest(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(simpleReq(srv.URL, "https://evil.com"))
@@ -88,7 +86,7 @@ func TestCorsDisallowedOriginSimpleRequest(t *testing.T) {
 // --- Wildcard ---
 
 func TestCorsWildcardWithoutCredentials(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"*"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"*"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(simpleReq(srv.URL, "https://anything.com"))
@@ -103,7 +101,7 @@ func TestCorsWildcardWithoutCredentials(t *testing.T) {
 }
 
 func TestCorsWildcardWithCredentialsUsesRealOrigin(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins:     []string{"*"},
 		AllowCredentials: true,
 	})
@@ -123,7 +121,7 @@ func TestCorsWildcardWithCredentialsUsesRealOrigin(t *testing.T) {
 // --- Preflight ---
 
 func TestCorsPreflight204(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(preflightReq(srv.URL, "https://example.com"))
@@ -138,7 +136,7 @@ func TestCorsPreflight204(t *testing.T) {
 }
 
 func TestCorsPreflightDisallowedOrigin403(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(preflightReq(srv.URL, "https://evil.com"))
@@ -153,7 +151,7 @@ func TestCorsPreflightDisallowedOrigin403(t *testing.T) {
 }
 
 func TestCorsOptionsWithoutACRMIsNotPreflight(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodOptions, srv.URL+"/", nil)
@@ -173,7 +171,7 @@ func TestCorsOptionsWithoutACRMIsNotPreflight(t *testing.T) {
 // --- Vary ---
 
 func TestCorsVaryOriginAlwaysSet(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(simpleReq(srv.URL, "https://example.com"))
@@ -194,7 +192,7 @@ func TestCorsVaryOriginAlwaysSet(t *testing.T) {
 }
 
 func TestCorsVaryExtraHeadersOnPreflight(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{AllowOrigins: []string{"https://example.com"}})
+	srv := newCorsServer(&CorsConfig{AllowOrigins: []string{"https://example.com"}})
 	defer srv.Close()
 
 	resp, err := http.DefaultClient.Do(preflightReq(srv.URL, "https://example.com"))
@@ -224,7 +222,7 @@ func TestCorsVaryExtraHeadersOnPreflight(t *testing.T) {
 // --- Headers individuales ---
 
 func TestCorsAllowMethods(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins: []string{"https://example.com"},
 		AllowMethods: []string{"GET", "POST"},
 	})
@@ -242,7 +240,7 @@ func TestCorsAllowMethods(t *testing.T) {
 }
 
 func TestCorsAllowHeaders(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins: []string{"https://example.com"},
 		AllowHeaders: []string{"Content-Type", "Authorization"},
 	})
@@ -260,7 +258,7 @@ func TestCorsAllowHeaders(t *testing.T) {
 }
 
 func TestCorsExposeHeaders(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins:  []string{"https://example.com"},
 		ExposeHeaders: []string{"X-Request-Id"},
 	})
@@ -278,7 +276,7 @@ func TestCorsExposeHeaders(t *testing.T) {
 }
 
 func TestCorsAllowCredentials(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins:     []string{"https://example.com"},
 		AllowCredentials: true,
 	})
@@ -296,7 +294,7 @@ func TestCorsAllowCredentials(t *testing.T) {
 }
 
 func TestCorsMaxAge(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins: []string{"https://example.com"},
 		MaxAge:       3600,
 	})
@@ -316,11 +314,11 @@ func TestCorsMaxAge(t *testing.T) {
 // --- nil config guard ---
 
 func TestCorsNilConfigUsesDefault(t *testing.T) {
-	r := gemrouter.NewGemRouter(
-		gemrouter.WithMiddlewares([]gemrouter.Middleware{}),
-		gemrouter.WithCors(nil),
+	r := NewGemRouter(
+		WithMiddlewares([]Middleware{}),
+		WithCors(nil),
 	)
-	r.GET("/", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	r.GET("/", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	srv := httptest.NewServer(r.Handler())
 	defer srv.Close()
 
@@ -338,7 +336,7 @@ func TestCorsNilConfigUsesDefault(t *testing.T) {
 // --- wildcard + credentials refleja origin real ---
 
 func TestCorsWildcardWithCredentialsReflectsOrigin(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins:     []string{"*"},
 		AllowCredentials: true,
 	})
@@ -358,7 +356,7 @@ func TestCorsWildcardWithCredentialsReflectsOrigin(t *testing.T) {
 // --- dynamic AllowHeaders fallback ---
 
 func TestCorsDynamicAllowHeaders(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins: []string{"https://example.com"},
 	})
 	defer srv.Close()
@@ -380,7 +378,7 @@ func TestCorsDynamicAllowHeaders(t *testing.T) {
 }
 
 func TestCorsStaticAllowHeadersOverridesDynamic(t *testing.T) {
-	srv := newCorsServer(&gemrouter.CorsConfig{
+	srv := newCorsServer(&CorsConfig{
 		AllowOrigins: []string{"https://example.com"},
 		AllowHeaders: []string{"Authorization"},
 	})
@@ -411,20 +409,20 @@ func TestWithCorsPanicsIfCalledTwice(t *testing.T) {
 		}
 	}()
 
-	gemrouter.NewGemRouter(
-		gemrouter.WithCors(&gemrouter.CorsConfig{AllowOrigins: []string{"https://a.com"}}),
-		gemrouter.WithCors(&gemrouter.CorsConfig{AllowOrigins: []string{"https://b.com"}}),
+	NewGemRouter(
+		WithCors(&CorsConfig{AllowOrigins: []string{"https://a.com"}}),
+		WithCors(&CorsConfig{AllowOrigins: []string{"https://b.com"}}),
 	)
 }
 
 // --- WithCorsDefault ---
 
 func TestWithCorsDefault(t *testing.T) {
-	r := gemrouter.NewGemRouter(
-		gemrouter.WithMiddlewares([]gemrouter.Middleware{}),
-		gemrouter.WithCorsDefault(),
+	r := NewGemRouter(
+		WithMiddlewares([]Middleware{}),
+		WithCorsDefault(),
 	)
-	r.GET("/", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	r.GET("/", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	srv := httptest.NewServer(r.Handler())
 	defer srv.Close()
 

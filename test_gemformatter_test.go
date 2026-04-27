@@ -1,19 +1,17 @@
-package gem_test
+package gem
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
 // --- ctx.Success default ---
 
 func TestSuccessDefault(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
-			ctx.Success(http.StatusOK, gemrouter.JSON{"id": 1})
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
+			ctx.Success(http.StatusOK, JSON{"id": 1})
 		})
 	})
 	defer srv.Close()
@@ -39,8 +37,8 @@ func TestSuccessDefault(t *testing.T) {
 // --- ctx.Fail default: single string ---
 
 func TestFailDefaultSingleString(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.Fail(http.StatusBadRequest, "invalid input")
 		})
 	})
@@ -67,8 +65,8 @@ func TestFailDefaultSingleString(t *testing.T) {
 // --- ctx.Fail default: multiple strings ---
 
 func TestFailDefaultMultipleStrings(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.Fail(http.StatusBadRequest, "name required", "email invalid")
 		})
 	})
@@ -96,9 +94,9 @@ func TestFailDefaultMultipleStrings(t *testing.T) {
 // --- ctx.Fail default: ValidationError slice ---
 
 func TestFailDefaultValidationErrors(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.POST("/", func(ctx *gemrouter.GemContext) {
-			v := gemrouter.NewValidator().
+	srv := newTestServer(func(r *GemRouter) {
+		r.POST("/", func(ctx *GemContext) {
+			v := NewValidator().
 				Check("name", "", "required").
 				Check("email", "bad", "email")
 			if !v.Valid() {
@@ -137,12 +135,12 @@ func TestFailDefaultValidationErrors(t *testing.T) {
 // --- WithResponseFormatter ---
 
 func TestWithResponseFormatter(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		gemrouter.WithResponseFormatter(func(code int, data any) (int, any) {
-			return code, gemrouter.JSON{"success": true, "data": data}
+	srv := newTestServer(func(r *GemRouter) {
+		WithResponseFormatter(func(code int, data any) (int, any) {
+			return code, JSON{"success": true, "data": data}
 		})(r)
-		r.GET("/", func(ctx *gemrouter.GemContext) {
-			ctx.Success(http.StatusOK, gemrouter.JSON{"id": 42})
+		r.GET("/", func(ctx *GemContext) {
+			ctx.Success(http.StatusOK, JSON{"id": 42})
 		})
 	})
 	defer srv.Close()
@@ -172,12 +170,12 @@ func TestWithResponseFormatter(t *testing.T) {
 // --- WithErrorFormatter: custom multi-error shape ---
 
 func TestWithErrorFormatter(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		gemrouter.WithErrorFormatter(func(code int, errs []any) (int, any) {
-			return code, gemrouter.JSON{"success": false, "errors": errs, "code": code}
+	srv := newTestServer(func(r *GemRouter) {
+		WithErrorFormatter(func(code int, errs []any) (int, any) {
+			return code, JSON{"success": false, "errors": errs, "code": code}
 		})(r)
-		r.POST("/", func(ctx *gemrouter.GemContext) {
-			v := gemrouter.NewValidator().
+		r.POST("/", func(ctx *GemContext) {
+			v := NewValidator().
 				Check("name", "", "required").
 				Check("email", "bad", "email")
 			ctx.Fail(http.StatusUnprocessableEntity, v.Errors())
@@ -212,12 +210,12 @@ func TestWithErrorFormatter(t *testing.T) {
 // --- formatter can override status code ---
 
 func TestResponseFormatterOverridesCode(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		gemrouter.WithResponseFormatter(func(_ int, data any) (int, any) {
+	srv := newTestServer(func(r *GemRouter) {
+		WithResponseFormatter(func(_ int, data any) (int, any) {
 			return http.StatusAccepted, data
 		})(r)
-		r.GET("/", func(ctx *gemrouter.GemContext) {
-			ctx.Success(http.StatusOK, gemrouter.JSON{})
+		r.GET("/", func(ctx *GemContext) {
+			ctx.Success(http.StatusOK, JSON{})
 		})
 	})
 	defer srv.Close()

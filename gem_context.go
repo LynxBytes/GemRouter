@@ -118,12 +118,19 @@ var (
 	okBody               = []byte(`{"message":"ok"}` + "\n")
 	notFoundBody         = []byte(`{"error":"not found"}` + "\n")
 	methodNotAllowedBody = []byte(`{"error":"method not allowed"}` + "\n")
+	methodNotFoundBody   = []byte(`{"error":"method not found"}` + "\n")
 )
 
 var defaultMethodNotAllowed GemHandler = func(ctx *GemContext) {
 	ctx.Writer.Header().Set("Content-Type", "application/json")
 	ctx.Writer.WriteHeader(http.StatusMethodNotAllowed)
 	_, _ = ctx.Writer.Write(methodNotAllowedBody)
+}
+
+var defaultMethodNotFound GemHandler = func(ctx *GemContext) {
+	ctx.Writer.Header().Set("Content-Type", "application/json")
+	ctx.Writer.WriteHeader(http.StatusNotFound)
+	_, _ = ctx.Writer.Write(methodNotFoundBody)
 }
 
 func (context *GemContext) OK() {

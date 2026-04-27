@@ -1,4 +1,4 @@
-package gem_test
+package gem
 
 import (
 	"bytes"
@@ -8,15 +8,13 @@ import (
 	"net/http/cookiejar"
 	"strings"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
 // --- Response methods ---
 
 func TestString(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, "hello")
 		})
 	})
@@ -38,8 +36,8 @@ func TestString(t *testing.T) {
 }
 
 func TestToJSON(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.ToJSON(http.StatusCreated, map[string]string{"key": "value"})
 		})
 	})
@@ -67,8 +65,8 @@ func TestToJSON(t *testing.T) {
 }
 
 func TestNoContent(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.DELETE("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.DELETE("/", func(ctx *GemContext) {
 			ctx.NoContent(http.StatusNoContent)
 		})
 	})
@@ -87,8 +85,8 @@ func TestNoContent(t *testing.T) {
 }
 
 func TestOK(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.OK()
 		})
 	})
@@ -106,8 +104,8 @@ func TestOK(t *testing.T) {
 }
 
 func TestNOTFOUND(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.NOTFOUND()
 		})
 	})
@@ -126,8 +124,8 @@ func TestNOTFOUND(t *testing.T) {
 
 func TestStatusCode(t *testing.T) {
 	got := make(chan int, 1)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.String(http.StatusAccepted, "")
 			got <- ctx.StatusCode()
 		})
@@ -143,8 +141,8 @@ func TestStatusCode(t *testing.T) {
 // --- Request reading ---
 
 func TestQuery(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, ctx.Query("name"))
 		})
 	})
@@ -163,8 +161,8 @@ func TestQuery(t *testing.T) {
 }
 
 func TestHeader(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, ctx.Header("X-Custom"))
 		})
 	})
@@ -185,8 +183,8 @@ func TestHeader(t *testing.T) {
 }
 
 func TestMethod(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.POST("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.POST("/", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, ctx.Method())
 		})
 	})
@@ -205,8 +203,8 @@ func TestMethod(t *testing.T) {
 }
 
 func TestPath(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/foo/bar", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/foo/bar", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, ctx.Path())
 		})
 	})
@@ -225,8 +223,8 @@ func TestPath(t *testing.T) {
 }
 
 func TestParam(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/users/:id", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/users/:id", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, ctx.Param("id"))
 		})
 	})
@@ -245,8 +243,8 @@ func TestParam(t *testing.T) {
 }
 
 func TestFromJSON(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.POST("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.POST("/", func(ctx *GemContext) {
 			var payload map[string]string
 			if err := ctx.FromJSON(&payload); err != nil {
 				ctx.String(http.StatusBadRequest, err.Error())
@@ -271,8 +269,8 @@ func TestFromJSON(t *testing.T) {
 }
 
 func TestFromJSONBodyTooLarge(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.POST("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.POST("/", func(ctx *GemContext) {
 			var payload map[string]string
 			if err := ctx.FromJSON(&payload); err != nil {
 				ctx.NoContent(http.StatusRequestEntityTooLarge)
@@ -302,8 +300,8 @@ func TestFromJSONBodyTooLarge(t *testing.T) {
 
 func TestSetGet(t *testing.T) {
 	got := make(chan any, 1)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.Set("user", "mario")
 			val, ok := ctx.Get("user")
 			if !ok {
@@ -325,8 +323,8 @@ func TestSetGet(t *testing.T) {
 
 func TestGetMissing(t *testing.T) {
 	got := make(chan bool, 1)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			_, ok := ctx.Get("missing")
 			got <- ok
 			ctx.NoContent(http.StatusOK)
@@ -348,8 +346,8 @@ func newClientWithJar() *http.Client {
 }
 
 func TestSetCookie(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.SetCookie("session", "abc123", 3600, "/", "", false, true)
 			ctx.NoContent(http.StatusOK)
 		})
@@ -371,12 +369,12 @@ func TestSetCookie(t *testing.T) {
 }
 
 func TestCookie(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/set", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/set", func(ctx *GemContext) {
 			ctx.SetCookie("token", "xyz", 3600, "/", "", false, false)
 			ctx.NoContent(http.StatusOK)
 		})
-		r.GET("/get", func(ctx *gemrouter.GemContext) {
+		r.GET("/get", func(ctx *GemContext) {
 			val, err := ctx.Cookie("token")
 			if err != nil {
 				ctx.String(http.StatusBadRequest, "no cookie")
@@ -403,8 +401,8 @@ func TestCookie(t *testing.T) {
 }
 
 func TestDeleteCookie(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ctx.DeleteCookie("session")
 			ctx.NoContent(http.StatusOK)
 		})

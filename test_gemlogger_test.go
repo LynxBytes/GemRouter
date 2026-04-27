@@ -1,4 +1,4 @@
-package gem_test
+package gem
 
 import (
 	"bytes"
@@ -7,19 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
-func newLoggerRouter(cfg gemrouter.GemConfig) *gemrouter.GemRouter {
-	r := gemrouter.NewGemRouter(cfg)
-	r.GET("/ping", func(ctx *gemrouter.GemContext) { ctx.OK() })
+func newLoggerRouter(cfg GemConfig) *GemRouter {
+	r := NewGemRouter(cfg)
+	r.GET("/ping", func(ctx *GemContext) { ctx.OK() })
 	return r
 }
 
 func TestWithTextLogger(t *testing.T) {
 	var buf bytes.Buffer
-	newLoggerRouter(gemrouter.WithTextLogger(&buf, slog.LevelInfo))
+	newLoggerRouter(WithTextLogger(&buf, slog.LevelInfo))
 	if !strings.Contains(buf.String(), "Endpoint registered") {
 		t.Fatalf("expected log in buffer, got %q", buf.String())
 	}
@@ -27,7 +25,7 @@ func TestWithTextLogger(t *testing.T) {
 
 func TestWithJSONLogger(t *testing.T) {
 	var buf bytes.Buffer
-	newLoggerRouter(gemrouter.WithJSONLogger(&buf, slog.LevelInfo))
+	newLoggerRouter(WithJSONLogger(&buf, slog.LevelInfo))
 	if !strings.Contains(buf.String(), `"msg"`) {
 		t.Fatalf("expected JSON log in buffer, got %q", buf.String())
 	}
@@ -35,7 +33,7 @@ func TestWithJSONLogger(t *testing.T) {
 
 func TestWithTextFileLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "text.log")
-	r := newLoggerRouter(gemrouter.WithTextFileLogger(path, slog.LevelInfo))
+	r := newLoggerRouter(WithTextFileLogger(path, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -51,7 +49,7 @@ func TestWithTextFileLogger(t *testing.T) {
 
 func TestWithJSONFileLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "json.log")
-	r := newLoggerRouter(gemrouter.WithJSONFileLogger(path, slog.LevelInfo))
+	r := newLoggerRouter(WithJSONFileLogger(path, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -67,7 +65,7 @@ func TestWithJSONFileLogger(t *testing.T) {
 
 func TestWithTextTeeLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tee_text.log")
-	r := newLoggerRouter(gemrouter.WithTextTeeLogger(path, slog.LevelInfo))
+	r := newLoggerRouter(WithTextTeeLogger(path, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -83,7 +81,7 @@ func TestWithTextTeeLogger(t *testing.T) {
 
 func TestWithJSONTeeLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tee_json.log")
-	r := newLoggerRouter(gemrouter.WithJSONTeeLogger(path, slog.LevelInfo))
+	r := newLoggerRouter(WithJSONTeeLogger(path, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -99,8 +97,8 @@ func TestWithJSONTeeLogger(t *testing.T) {
 
 func TestWithTextRotateLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rotate_text.log")
-	cfg := gemrouter.LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
-	r := newLoggerRouter(gemrouter.WithTextRotateLogger(cfg, slog.LevelInfo))
+	cfg := LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
+	r := newLoggerRouter(WithTextRotateLogger(cfg, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -116,8 +114,8 @@ func TestWithTextRotateLogger(t *testing.T) {
 
 func TestWithJSONRotateLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rotate_json.log")
-	cfg := gemrouter.LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
-	r := newLoggerRouter(gemrouter.WithJSONRotateLogger(cfg, slog.LevelInfo))
+	cfg := LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
+	r := newLoggerRouter(WithJSONRotateLogger(cfg, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -133,8 +131,8 @@ func TestWithJSONRotateLogger(t *testing.T) {
 
 func TestWithTextTeeRotateLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tee_rotate_text.log")
-	cfg := gemrouter.LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
-	r := newLoggerRouter(gemrouter.WithTextTeeRotateLogger(cfg, slog.LevelInfo))
+	cfg := LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
+	r := newLoggerRouter(WithTextTeeRotateLogger(cfg, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -150,8 +148,8 @@ func TestWithTextTeeRotateLogger(t *testing.T) {
 
 func TestWithJSONTeeRotateLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tee_rotate_json.log")
-	cfg := gemrouter.LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
-	r := newLoggerRouter(gemrouter.WithJSONTeeRotateLogger(cfg, slog.LevelInfo))
+	cfg := LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
+	r := newLoggerRouter(WithJSONTeeRotateLogger(cfg, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -166,7 +164,7 @@ func TestWithJSONTeeRotateLogger(t *testing.T) {
 }
 
 func TestOpenLogFileFallback(t *testing.T) {
-	r := newLoggerRouter(gemrouter.WithTextFileLogger("/nonexistent/path/file.log", slog.LevelInfo))
+	r := newLoggerRouter(WithTextFileLogger("/nonexistent/path/file.log", slog.LevelInfo))
 	if r.LogCloser() != nil {
 		t.Fatal("logCloser should be nil when falling back to stdout")
 	}
@@ -174,7 +172,7 @@ func TestOpenLogFileFallback(t *testing.T) {
 
 func TestWithSplitLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "split.log")
-	r := newLoggerRouter(gemrouter.WithSplitLogger(path, slog.LevelInfo))
+	r := newLoggerRouter(WithSplitLogger(path, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -190,8 +188,8 @@ func TestWithSplitLogger(t *testing.T) {
 
 func TestWithSplitRotateLogger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "split_rotate.log")
-	cfg := gemrouter.LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
-	r := newLoggerRouter(gemrouter.WithSplitRotateLogger(cfg, slog.LevelInfo))
+	cfg := LogRotateConfig{Path: path, MaxSizeMB: 1, MaxBackups: 1}
+	r := newLoggerRouter(WithSplitRotateLogger(cfg, slog.LevelInfo))
 
 	content, err := os.ReadFile(path)
 	if err != nil {

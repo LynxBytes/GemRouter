@@ -25,7 +25,8 @@ type GemRouter struct {
 	Addr              string
 	Port              string
 	middlewares       []Middleware
-	MethodNotAllowed  GemHandler
+	methodNotFound    GemHandler
+	methodNotAllowed  GemHandler
 	Health            GemHandler
 	shutdownTimeout   time.Duration
 	readTimeout       time.Duration
@@ -59,7 +60,7 @@ func newHTTPRouter() *httprouter.Router {
 func newBaseRouter() *GemRouter {
 	stdout := &rawModeWriter{w: os.Stdout}
 	r := &GemRouter{
-		routerVersion:     "v0.0.17",
+		routerVersion:     "v0.0.18",
 		mux:               newHTTPRouter(),
 		name:              "GemRouter Server",
 		version:           "v0.0.0",
@@ -74,7 +75,8 @@ func newBaseRouter() *GemRouter {
 		logHandlers:       true,
 		responseFormatter: defaultResponseFormatter,
 		errorFormatter:    defaultErrorFormatter,
-		MethodNotAllowed:  defaultMethodNotAllowed,
+		methodNotAllowed:  defaultMethodNotAllowed,
+		methodNotFound:    defaultMethodNotFound,
 		Health:            func(ctx *GemContext) { ctx.OK() },
 	}
 	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
@@ -138,17 +140,14 @@ func (r *GemRouter) DELETE(pattern string, handler GemHandler) {
 }
 
 func (r *GemRouter) HandleSystemErrors() {
-	methodNotAllowedFinal := buildChain(r.MethodNotAllowed, r.middlewares)
+	methodNotAllowedFinal := buildChain(r.methodNotAllowed, r.middlewares)
 	r.mux.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := r.newContext(w, req)
 		defer r.releaseContext(ctx)
 		methodNotAllowedFinal(ctx)
 	})
 
-	notFoundFinal := buildChain(func(ctx *GemContext) {
-		ctx.Fail(http.StatusNotFound, "Resource not found: "+ctx.Request.URL.Path)
-	}, r.middlewares)
-
+	notFoundFinal := buildChain(r.methodNotFound, r.middlewares)
 	r.mux.NotFound = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := r.newContext(w, req)
 		defer r.releaseContext(ctx)

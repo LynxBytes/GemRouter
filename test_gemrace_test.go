@@ -1,19 +1,15 @@
-package gem_test
+package gem
 
 import (
 	"fmt"
 	"net/http"
 	"sync"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
-// TestRaceConcurrentRequests dispara N requests concurrentes para verificar
-// que el pool no produce data races bajo carga paralela.
 func TestRaceConcurrentRequests(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/ping", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/ping", func(ctx *GemContext) {
 			ctx.Set("key", "value")
 			ctx.NoContent(http.StatusOK)
 		})
@@ -37,10 +33,9 @@ func TestRaceConcurrentRequests(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRaceKeysIsolation verifica que ctx.Keys no se filtra entre requests concurrentes.
 func TestRaceKeysIsolation(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/echo/:id", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/echo/:id", func(ctx *GemContext) {
 			id := ctx.Param("id")
 			ctx.Set("id", id)
 			got, _ := ctx.Get("id")
@@ -69,13 +64,12 @@ func TestRaceKeysIsolation(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRaceRequestIDUnique verifica que los request IDs son únicos bajo concurrencia.
 func TestRaceRequestIDUnique(t *testing.T) {
 	ids := make(chan string, 50)
 
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.Use(gemrouter.Logger)
-		r.GET("/ping", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.Use(Logger)
+		r.GET("/ping", func(ctx *GemContext) {
 			ids <- ctx.RequestID()
 			ctx.NoContent(http.StatusOK)
 		})
@@ -108,14 +102,12 @@ func TestRaceRequestIDUnique(t *testing.T) {
 	}
 }
 
-// TestRaceCopyInGoroutine verifica que ctx.Copy() es seguro para usar en una goroutine
-// después de que el handler retorna y el ctx original ha sido reciclado al pool.
 func TestRaceCopyInGoroutine(t *testing.T) {
 	const n = 20
 	done := make(chan string, n)
 
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/async", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/async", func(ctx *GemContext) {
 			ctx.Set("token", "abc123")
 			cp := ctx.Copy()
 			go func() {
@@ -142,11 +134,9 @@ func TestRaceCopyInGoroutine(t *testing.T) {
 	}
 }
 
-// TestRaceMultipleRoutesConcurrent verifica que requests concurrentes a distintas
-// rutas no interfieren entre sí.
 func TestRaceMultipleRoutesConcurrent(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/a", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/a", func(ctx *GemContext) {
 			ctx.Set("route", "a")
 			got, _ := ctx.Get("route")
 			if got != "a" {
@@ -154,7 +144,7 @@ func TestRaceMultipleRoutesConcurrent(t *testing.T) {
 			}
 			ctx.NoContent(http.StatusOK)
 		})
-		r.GET("/b", func(ctx *gemrouter.GemContext) {
+		r.GET("/b", func(ctx *GemContext) {
 			ctx.Set("route", "b")
 			got, _ := ctx.Get("route")
 			if got != "b" {

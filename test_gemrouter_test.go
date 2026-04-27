@@ -1,33 +1,29 @@
-package gem_test
+package gem
 
 import (
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	gemrouter "github.com/LynxBytes/GemRouter"
 )
 
-func newTestServer(setup func(*gemrouter.GemRouter)) *httptest.Server {
-	r := gemrouter.BasicGemRouter()
+func newTestServer(setup func(*GemRouter)) *httptest.Server {
+	r := BasicGemRouter()
 	setup(r)
 	return httptest.NewServer(r.Handler())
 }
 
-// --- Constructor ---
-
 func TestNewGemRouter(t *testing.T) {
-	r := gemrouter.DefaultGemRouter()
+	r := DefaultGemRouter()
 	if r == nil {
 		t.Fatal("router should not be nil")
 	}
 }
 
 func TestCustomGemRouter(t *testing.T) {
-	r := gemrouter.NewGemRouter(
-		gemrouter.WithMiddleware(func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) { next(ctx) }
+	r := NewGemRouter(
+		WithMiddleware(func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) { next(ctx) }
 		}),
 	)
 	if r == nil {
@@ -35,11 +31,9 @@ func TestCustomGemRouter(t *testing.T) {
 	}
 }
 
-// --- HTTP methods ---
-
 func TestGETRoute(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/get", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/get", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	})
 	defer srv.Close()
 
@@ -54,8 +48,8 @@ func TestGETRoute(t *testing.T) {
 }
 
 func TestPOSTRoute(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.POST("/post", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusCreated) })
+	srv := newTestServer(func(r *GemRouter) {
+		r.POST("/post", func(ctx *GemContext) { ctx.NoContent(http.StatusCreated) })
 	})
 	defer srv.Close()
 
@@ -70,8 +64,8 @@ func TestPOSTRoute(t *testing.T) {
 }
 
 func TestPUTRoute(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.PUT("/put", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	srv := newTestServer(func(r *GemRouter) {
+		r.PUT("/put", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	})
 	defer srv.Close()
 
@@ -87,8 +81,8 @@ func TestPUTRoute(t *testing.T) {
 }
 
 func TestPATCHRoute(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.PATCH("/patch", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+	srv := newTestServer(func(r *GemRouter) {
+		r.PATCH("/patch", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	})
 	defer srv.Close()
 
@@ -104,8 +98,8 @@ func TestPATCHRoute(t *testing.T) {
 }
 
 func TestDELETERoute(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.DELETE("/del", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusNoContent) })
+	srv := newTestServer(func(r *GemRouter) {
+		r.DELETE("/del", func(ctx *GemContext) { ctx.NoContent(http.StatusNoContent) })
 	})
 	defer srv.Close()
 
@@ -120,20 +114,18 @@ func TestDELETERoute(t *testing.T) {
 	}
 }
 
-// --- Middleware ---
-
 func TestMiddlewareExecutes(t *testing.T) {
 	order := make([]string, 0, 2)
 	ch := make(chan []string, 1)
 
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.Use(func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.Use(func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) {
 				order = append(order, "mid")
 				next(ctx)
 			}
 		})
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+		r.GET("/", func(ctx *GemContext) {
 			order = append(order, "handler")
 			ch <- order
 			ctx.NoContent(http.StatusOK)
@@ -141,7 +133,7 @@ func TestMiddlewareExecutes(t *testing.T) {
 	})
 	defer srv.Close()
 
-	http.Get(srv.URL + "/") //nolint
+	http.Get(srv.URL + "/")
 	got := <-ch
 	if len(got) != 2 || got[0] != "mid" || got[1] != "handler" {
 		t.Fatalf("want [mid handler], got %v", got)
@@ -152,19 +144,19 @@ func TestMiddlewareChainOrder(t *testing.T) {
 	order := make([]string, 0, 3)
 	ch := make(chan []string, 1)
 
-	mid := func(label string) gemrouter.Middleware {
-		return func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) {
+	mid := func(label string) Middleware {
+		return func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) {
 				order = append(order, label)
 				next(ctx)
 			}
 		}
 	}
 
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
+	srv := newTestServer(func(r *GemRouter) {
 		r.Use(mid("first"))
 		r.Use(mid("second"))
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+		r.GET("/", func(ctx *GemContext) {
 			order = append(order, "handler")
 			ch <- order
 			ctx.NoContent(http.StatusOK)
@@ -172,19 +164,17 @@ func TestMiddlewareChainOrder(t *testing.T) {
 	})
 	defer srv.Close()
 
-	http.Get(srv.URL + "/") //nolint
+	http.Get(srv.URL + "/")
 	got := <-ch
 	if len(got) != 3 || got[0] != "first" || got[1] != "second" || got[2] != "handler" {
 		t.Fatalf("want [first second handler], got %v", got)
 	}
 }
 
-// --- Group ---
-
 func TestGroupPrefix(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
+	srv := newTestServer(func(r *GemRouter) {
 		api := r.Group("/api")
-		api.GET("/users", func(ctx *gemrouter.GemContext) {
+		api.GET("/users", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, "users")
 		})
 	})
@@ -208,15 +198,15 @@ func TestGroupPrefix(t *testing.T) {
 func TestGroupMiddleware(t *testing.T) {
 	ch := make(chan bool, 1)
 
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		mid := func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		mid := func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) {
 				ch <- true
 				next(ctx)
 			}
 		}
 		api := r.Group("/api", mid)
-		api.GET("/ping", func(ctx *gemrouter.GemContext) {
+		api.GET("/ping", func(ctx *GemContext) {
 			ctx.NoContent(http.StatusOK)
 		})
 	})
@@ -228,35 +218,31 @@ func TestGroupMiddleware(t *testing.T) {
 	}
 }
 
-// --- Group.Use ---
-
 func TestGroupUse(t *testing.T) {
 	ch := make(chan bool, 1)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
+	srv := newTestServer(func(r *GemRouter) {
 		api := r.Group("/api")
-		api.Use(func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) {
+		api.Use(func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) {
 				ch <- true
 				next(ctx)
 			}
 		})
-		api.GET("/ping", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+		api.GET("/ping", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	})
 	defer srv.Close()
 
-	http.Get(srv.URL + "/api/ping") //nolint
+	http.Get(srv.URL + "/api/ping")
 	if ok := <-ch; !ok {
 		t.Fatal("group middleware added via Use() did not execute")
 	}
 }
 
-// --- Group.Group nested ---
-
 func TestNestedGroup(t *testing.T) {
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
+	srv := newTestServer(func(r *GemRouter) {
 		api := r.Group("/api")
 		v1 := api.Group("/v1")
-		v1.GET("/users", func(ctx *gemrouter.GemContext) {
+		v1.GET("/users", func(ctx *GemContext) {
 			ctx.String(http.StatusOK, "users")
 		})
 	})
@@ -279,46 +265,42 @@ func TestNestedGroup(t *testing.T) {
 
 func TestNestedGroupInheritsMiddlewares(t *testing.T) {
 	ch := make(chan string, 2)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		api := r.Group("/api", func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) { ch <- "api"; next(ctx) }
+	srv := newTestServer(func(r *GemRouter) {
+		api := r.Group("/api", func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) { ch <- "api"; next(ctx) }
 		})
-		v1 := api.Group("/v1", func(next gemrouter.GemHandler) gemrouter.GemHandler {
-			return func(ctx *gemrouter.GemContext) { ch <- "v1"; next(ctx) }
+		v1 := api.Group("/v1", func(next GemHandler) GemHandler {
+			return func(ctx *GemContext) { ch <- "v1"; next(ctx) }
 		})
-		v1.GET("/ping", func(ctx *gemrouter.GemContext) { ctx.NoContent(http.StatusOK) })
+		v1.GET("/ping", func(ctx *GemContext) { ctx.NoContent(http.StatusOK) })
 	})
 	defer srv.Close()
 
-	http.Get(srv.URL + "/api/v1/ping") //nolint
+	http.Get(srv.URL + "/api/v1/ping")
 	got := []string{<-ch, <-ch}
 	if got[0] != "api" || got[1] != "v1" {
 		t.Fatalf("want [api v1], got %v", got)
 	}
 }
 
-// --- StatusCode default ---
-
 func TestStatusCodeDefaultOK(t *testing.T) {
 	ch := make(chan int, 1)
-	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/", func(ctx *gemrouter.GemContext) {
+	srv := newTestServer(func(r *GemRouter) {
+		r.GET("/", func(ctx *GemContext) {
 			ch <- ctx.StatusCode()
 		})
 	})
 	defer srv.Close()
 
-	http.Get(srv.URL + "/") //nolint
+	http.Get(srv.URL + "/")
 	if code := <-ch; code != http.StatusOK {
 		t.Fatalf("want 200 before any write, got %d", code)
 	}
 }
 
-// --- Handler ---
-
 func TestHandler(t *testing.T) {
-	r := gemrouter.NewGemRouter(gemrouter.WithMiddlewares([]gemrouter.Middleware{}))
-	r.GET("/ping", func(ctx *gemrouter.GemContext) {
+	r := NewGemRouter(WithMiddlewares([]Middleware{}))
+	r.GET("/ping", func(ctx *GemContext) {
 		ctx.String(http.StatusOK, "pong")
 	})
 

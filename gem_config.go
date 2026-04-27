@@ -79,7 +79,7 @@ func WithMiddleware(middleware Middleware) GemConfig {
 
 func WithMethodNotAllowed(handler GemHandler) GemConfig {
 	return func(router *GemRouter) {
-		router.MethodNotAllowed = handler
+		router.methodNotAllowed = handler
 	}
 }
 
