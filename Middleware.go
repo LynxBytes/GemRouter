@@ -35,7 +35,7 @@ func Logger(next GemHandler) GemHandler {
 	return func(ctx *GemContext) {
 		start := time.Now()
 		reqID := newRequestID()
-		ctx.Set("request_id", reqID)
+		ctx.Store.RequestID = reqID
 
 		ctx.Logger.Info("→", map[string]any{
 			"request_id": reqID,
@@ -66,70 +66,113 @@ func Timeout(d time.Duration) Middleware {
 	}
 }
 
+type corsRuntime struct {
+	allowAll      bool
+	origins       map[string]struct{}
+	allowMethods  string
+	allowHeaders  string
+	exposeHeaders string
+	maxAge        string
+}
+
+func buildCorsRuntime(cfg *CorsConfig) *corsRuntime {
+	rt := &corsRuntime{
+		origins: make(map[string]struct{}, len(cfg.AllowOrigins)),
+	}
+	for _, o := range cfg.AllowOrigins {
+		if o == "*" {
+			rt.allowAll = true
+			continue
+		}
+		rt.origins[o] = struct{}{}
+	}
+	if len(cfg.AllowMethods) > 0 {
+		rt.allowMethods = strings.Join(cfg.AllowMethods, ", ")
+	}
+	if len(cfg.AllowHeaders) > 0 {
+		rt.allowHeaders = strings.Join(cfg.AllowHeaders, ", ")
+	}
+	if len(cfg.ExposeHeaders) > 0 {
+		rt.exposeHeaders = strings.Join(cfg.ExposeHeaders, ", ")
+	}
+	if cfg.MaxAge > 0 {
+		rt.maxAge = strconv.Itoa(cfg.MaxAge)
+	}
+	return rt
+}
+
 func Cors(cfg *CorsConfig) Middleware {
 	if cfg == nil {
 		cfg = defaultCors
 	}
+	rt := buildCorsRuntime(cfg)
 
 	return func(next GemHandler) GemHandler {
 		return func(ctx *GemContext) {
-			origin := ctx.Request.Header.Get("Origin")
+			req := ctx.Request
+			origin := req.Header.Get("Origin")
+
 			if origin == "" {
 				next(ctx)
 				return
 			}
 
-			isPreflight := ctx.Request.Method == http.MethodOptions &&
-				ctx.Request.Header.Get("Access-Control-Request-Method") != ""
+			h := ctx.Writer.Header()
+			h.Add("Vary", "Origin")
 
-			headers := ctx.Writer.Header()
-			addVary(headers, "Origin")
+			isPreflight := req.Method == http.MethodOptions &&
+				req.Header.Get("Access-Control-Request-Method") != ""
+
 			if isPreflight {
-				addVary(headers, "Access-Control-Request-Method", "Access-Control-Request-Headers")
+				h.Add("Vary", "Access-Control-Request-Method")
+				h.Add("Vary", "Access-Control-Request-Headers")
 			}
 
-			allowed := false
-			for _, allowedOrigin := range cfg.AllowOrigins {
-				if allowedOrigin == "*" {
-					if cfg.AllowCredentials {
-						headers.Set("Access-Control-Allow-Origin", origin)
-					} else {
-						headers.Set("Access-Control-Allow-Origin", "*")
-					}
-					allowed = true
-					break
-				}
-				if allowedOrigin == origin {
-					headers.Set("Access-Control-Allow-Origin", origin)
-					allowed = true
-					break
-				}
+			allowed := rt.allowAll
+			if !allowed {
+				_, allowed = rt.origins[origin]
 			}
 
-			if !allowed && isPreflight {
-				ctx.Writer.WriteHeader(http.StatusForbidden)
+			if !allowed {
+				if isPreflight {
+					ctx.Writer.WriteHeader(http.StatusForbidden)
+					return
+				}
+				next(ctx)
 				return
 			}
 
-			if len(cfg.AllowMethods) > 0 {
-				headers.Set("Access-Control-Allow-Methods", strings.Join(cfg.AllowMethods, ", "))
+			if rt.allowAll {
+				if cfg.AllowCredentials {
+					h.Set("Access-Control-Allow-Origin", origin)
+				} else {
+					h.Set("Access-Control-Allow-Origin", "*")
+				}
+			} else {
+				h.Set("Access-Control-Allow-Origin", origin)
 			}
-			if len(cfg.AllowHeaders) > 0 {
-				headers.Set("Access-Control-Allow-Headers", strings.Join(cfg.AllowHeaders, ", "))
-			} else if reqHeaders := ctx.Request.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-				headers.Set("Access-Control-Allow-Headers", reqHeaders)
+
+			if rt.allowMethods != "" {
+				h.Set("Access-Control-Allow-Methods", rt.allowMethods)
 			}
-			if len(cfg.ExposeHeaders) > 0 {
-				headers.Set("Access-Control-Expose-Headers", strings.Join(cfg.ExposeHeaders, ", "))
+			if rt.allowHeaders != "" {
+				h.Set("Access-Control-Allow-Headers", rt.allowHeaders)
+			} else if isPreflight {
+				if reqH := req.Header.Get("Access-Control-Request-Headers"); reqH != "" {
+					h.Set("Access-Control-Allow-Headers", reqH)
+				}
+			}
+			if rt.exposeHeaders != "" {
+				h.Set("Access-Control-Expose-Headers", rt.exposeHeaders)
 			}
 			if cfg.AllowCredentials {
-				headers.Set("Access-Control-Allow-Credentials", "true")
-			}
-			if cfg.MaxAge > 0 {
-				headers.Set("Access-Control-Max-Age", strconv.Itoa(cfg.MaxAge))
+				h.Set("Access-Control-Allow-Credentials", "true")
 			}
 
 			if isPreflight {
+				if rt.maxAge != "" {
+					h.Set("Access-Control-Max-Age", rt.maxAge)
+				}
 				ctx.Writer.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -139,22 +182,26 @@ func Cors(cfg *CorsConfig) Middleware {
 	}
 }
 
-func addVary(h http.Header, values ...string) {
-	existing := make(map[string]bool)
-	for _, v := range h.Values("Vary") {
-		existing[strings.TrimSpace(v)] = true
+func WithPrometheus(metricsPath string) GemConfig {
+	if metricsPath == "" {
+		metricsPath = "/metrics"
 	}
-	for _, v := range values {
-		if !existing[v] {
-			h.Add("Vary", v)
-		}
+	return func(r *GemRouter) {
+		m := newGemMetrics()
+		r.middlewares = append(r.middlewares, m.middleware())
+		handler := m.handler()
+		r.mux.HandleFunc("GET "+metricsPath, func(w http.ResponseWriter, req *http.Request) {
+			ctx := r.newContext(w, req)
+			defer r.releaseContext(ctx)
+			handler(ctx)
+		})
 	}
 }
 
 func newRequestID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }
 
 func clientIP(r *http.Request, trustProxy bool) string {

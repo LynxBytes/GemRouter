@@ -10,7 +10,7 @@ import (
 )
 
 func newTestServer(setup func(*gemrouter.GemRouter)) *httptest.Server {
-	r := gemrouter.NewGemRouter(gemrouter.WithMiddlewares([]gemrouter.Middleware{}))
+	r := gemrouter.BasicGemRouter()
 	setup(r)
 	return httptest.NewServer(r.Handler())
 }

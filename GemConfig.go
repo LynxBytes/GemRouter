@@ -1,19 +1,30 @@
 package gemrouter
 
 import (
-	"net/http"
 	"time"
 )
 
 type GemConfig func(router *GemRouter)
 
 var defaultCors = &CorsConfig{
-	AllowOrigins: []string{"http://localhost:3000", "http://localhost:5173", "http://localhost:8080"},
-	AllowMethods: []string{
-		http.MethodGet, http.MethodPost, http.MethodPut,
-		http.MethodPatch, http.MethodDelete, http.MethodOptions,
+	AllowOrigins: []string{
+		"http://localhost:3000",
+		"http://localhost:5173",
+		"http://localhost:8080",
 	},
-	AllowHeaders:     []string{"Content-Type", "Authorization"},
+	AllowMethods: []string{
+		"GET",
+		"POST",
+		"PUT",
+		"PATCH",
+		"DELETE",
+		"OPTIONS",
+	},
+	AllowHeaders: []string{
+		"Content-Type",
+		"Authorization",
+	},
+	ExposeHeaders:    nil,
 	AllowCredentials: true,
 	MaxAge:           3600,
 }

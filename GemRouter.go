@@ -16,6 +16,7 @@ type GemRouter struct {
 	Addr            string
 	Port            string
 	middlewares     []Middleware
+	baseChain       GemHandler
 	NotFound        GemHandler
 	Health          GemHandler
 	shutdownTimeout time.Duration
@@ -29,6 +30,34 @@ const banner = `
  ▄████  ▄▄▄▄▄ ▄▄   ▄▄ █████▄   ▄▄▄  ▄▄ ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄
 ██  ▄▄▄ ██▄▄  ██▀▄▀██ ██▄▄██▄ ██▀██ ██ ██   ██   ██▄▄  ██▄█▄
  ▀███▀  ██▄▄▄ ██   ██ ██   ██ ▀███▀ ▀███▀   ██   ██▄▄▄ ██ ██\n`
+
+func BasicGemRouter() *GemRouter {
+	r := &GemRouter{
+		mux:             http.NewServeMux(),
+		Addr:            "0.0.0.0",
+		Port:            "8080",
+		shutdownTimeout: 5 * time.Second,
+		middlewares:     []Middleware{Cors(defaultCors), Recovery},
+		corsSet:         true,
+		logger:          defaultGemLogger,
+		NotFound: func(ctx *GemContext) {
+			ctx.NOTFOUND()
+		},
+		Health: func(ctx *GemContext) {
+			ctx.OK()
+		},
+	}
+
+	r.ctxPool = sync.Pool{
+		New: func() any {
+			return &GemContext{
+				Store: &ContextStore{},
+			}
+		},
+	}
+
+	return r
+}
 
 func DefaultGemRouter() *GemRouter {
 	r := &GemRouter{
@@ -46,7 +75,14 @@ func DefaultGemRouter() *GemRouter {
 			ctx.OK()
 		},
 	}
-	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Keys: make(map[string]any)} }}
+	r.ctxPool = sync.Pool{
+		New: func() any {
+			return &GemContext{
+				Store: &ContextStore{},
+			}
+		},
+	}
+
 	return r
 }
 
@@ -66,7 +102,13 @@ func NewGemRouter(configs ...GemConfig) *GemRouter {
 			ctx.OK()
 		},
 	}
-	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Keys: make(map[string]any)} }}
+	r.ctxPool = sync.Pool{
+		New: func() any {
+			return &GemContext{
+				Store: &ContextStore{},
+			}
+		},
+	}
 
 	for _, opt := range configs {
 		opt(r)
@@ -78,8 +120,8 @@ func NewGemRouter(configs ...GemConfig) *GemRouter {
 	return r
 }
 
-func (r *GemRouter) Use(m Middleware) {
-	r.middlewares = append(r.middlewares, m)
+func (r *GemRouter) Use(middleware Middleware) {
+	r.middlewares = append(r.middlewares, middleware)
 }
 
 func (r *GemRouter) GET(pattern string, handler GemHandler) {
@@ -146,44 +188,54 @@ func (r *GemRouter) Group(prefix string, middlewares ...Middleware) *GemGroup {
 
 func (r *GemRouter) newContext(response http.ResponseWriter, req *http.Request) *GemContext {
 	ctx := r.ctxPool.Get().(*GemContext)
-	ctx.rwBuf = responseWriter{ResponseWriter: response}
-	ctx.rw = &ctx.rwBuf
-	ctx.Writer = ctx.rw
+
 	ctx.Request = req
 	ctx.Logger = r.logger
 	ctx.trustProxy = r.trustProxy
+
+	ctx.rwBuf.ResponseWriter = response
+	ctx.rwBuf.status = 0
+	ctx.rwBuf.written = false
+	ctx.rw = &ctx.rwBuf
+
+	ctx.Writer = ctx.rw
+
 	return ctx
 }
 
 func (r *GemRouter) releaseContext(ctx *GemContext) {
-	clear(ctx.Keys)
-	ctx.Writer = nil
-	ctx.Request = nil
-	ctx.Logger = nil
-	ctx.rw = nil
+	if ctx.Store != nil {
+		ctx.Store.RequestID = ""
+		ctx.Store.UserID = ""
+		clear(ctx.Store.data)
+	}
+	ctx.Aborted = false
 	ctx.rwBuf.ResponseWriter = nil
 	ctx.rwBuf.status = 0
 	ctx.rwBuf.written = false
-	ctx.trustProxy = false
+	ctx.Request = nil
+	ctx.rw = nil
 	r.ctxPool.Put(ctx)
 }
 
 func (r *GemRouter) handle(method, pattern string, handler GemHandler, extra ...Middleware) {
-	all := make([]Middleware, 0, len(r.middlewares)+len(extra))
-	all = append(all, r.middlewares...)
-	all = append(all, extra...)
-	finalHandler := buildChain(handler, all)
+	finalHandler := buildChain(handler, r.middlewares, extra...)
 
-	r.mux.HandleFunc(method+" "+pattern, func(response http.ResponseWriter, req *http.Request) {
-		ctx := r.newContext(response, req)
+	r.mux.HandleFunc(method+" "+pattern, func(w http.ResponseWriter, req *http.Request) {
+		ctx := r.newContext(w, req)
 		defer r.releaseContext(ctx)
 		finalHandler(ctx)
 	})
 }
 
-func buildChain(handler GemHandler, middlewares []Middleware) GemHandler {
-	for i := len(middlewares) - 1; i >= 0; i-- {
-		handler = middlewares[i](handler)
+func buildChain(handler GemHandler, base []Middleware, extra ...Middleware) GemHandler {
+	for i := len(base) - 1; i >= 0; i-- {
+		handler = base[i](handler)
 	}
+
+	for i := len(extra) - 1; i >= 0; i-- {
+		handler = extra[i](handler)
+	}
+
 	return handler
 }

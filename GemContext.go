@@ -1,8 +1,10 @@
 package gemrouter
 
 import (
-	"encoding/json"
+	"io"
 	"net/http"
+
+	"github.com/bytedance/sonic"
 )
 
 const maxRequestBodySize = 4 << 20 // 4 MB
@@ -29,37 +31,62 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+type ContextStore struct {
+	RequestID string
+	UserID    string
+	data      map[string]any
+}
+
+func (store *ContextStore) Set(key string, val any) {
+	if store.data == nil {
+		store.data = make(map[string]any, 4)
+	}
+	store.data[key] = val
+}
+
+func (store *ContextStore) Get(key string) (any, bool) {
+	if store.data == nil {
+		return nil, false
+	}
+	v, ok := store.data[key]
+	return v, ok
+}
+
 type GemContext struct {
 	Writer     http.ResponseWriter
 	Request    *http.Request
-	Keys       map[string]any
+	Store      *ContextStore
 	Logger     GemLogger
+	Aborted    bool
 	rw         *responseWriter
 	rwBuf      responseWriter
 	trustProxy bool
 }
 
-// Copy returns a snapshot of the context safe to use in a goroutine.
-// The original context must not be used after the handler returns.
 func (context *GemContext) Copy() *GemContext {
-	keys := make(map[string]any, len(context.Keys))
-	for k, v := range context.Keys {
-		keys[k] = v
+	var storeCopy *ContextStore
+
+	if context.Store != nil {
+		storeCopy = &ContextStore{
+			RequestID: context.Store.RequestID,
+			UserID:    context.Store.UserID,
+			data:      make(map[string]any, len(context.Store.data)),
+		}
+
+		for k, v := range context.Store.data {
+			storeCopy.data[k] = v
+		}
 	}
+
 	return &GemContext{
 		Request: context.Request,
-		Keys:    keys,
+		Store:   storeCopy,
 		Logger:  context.Logger,
 	}
 }
 
 func (context *GemContext) RequestID() string {
-	id, ok := context.Keys["request_id"]
-	if !ok {
-		return ""
-	}
-	s, _ := id.(string)
-	return s
+	return context.Store.RequestID
 }
 
 func (context *GemContext) StatusCode() int {
@@ -75,7 +102,7 @@ func (context *GemContext) Status(code int) {
 
 func (context *GemContext) String(code int, text string) {
 	context.Writer.WriteHeader(code)
-	if _, err := context.Writer.Write([]byte(text)); err != nil {
+	if _, err := io.WriteString(context.Writer, text); err != nil {
 		context.Logger.Error("write error", map[string]any{"error": err})
 	}
 }
@@ -83,31 +110,39 @@ func (context *GemContext) String(code int, text string) {
 func (context *GemContext) FromJSON(data any) error {
 	defer context.Request.Body.Close()
 	context.Request.Body = http.MaxBytesReader(context.Writer, context.Request.Body, maxRequestBodySize)
-	return json.NewDecoder(context.Request.Body).Decode(data)
+	return sonic.ConfigDefault.NewDecoder(context.Request.Body).Decode(data)
 }
 
 func (context *GemContext) ToJSON(code int, data any) {
+	b, err := sonic.Marshal(data)
+	if err != nil {
+		context.Logger.Error("json encode error", map[string]any{"error": err})
+		return
+	}
 	context.Writer.Header().Set("Content-Type", "application/json")
 	context.Writer.WriteHeader(code)
-	if err := json.NewEncoder(context.Writer).Encode(data); err != nil {
-		context.Logger.Error("json encode error", map[string]any{"error": err})
-	}
+	_, _ = context.Writer.Write(b)
 }
 
 func (context *GemContext) NoContent(code int) {
 	context.Writer.WriteHeader(code)
 }
 
+var (
+	okBody       = []byte(`{"message":"ok"}` + "\n")
+	notFoundBody = []byte(`{"error":"not found"}` + "\n")
+)
+
 func (context *GemContext) OK() {
-	context.ToJSON(http.StatusOK, map[string]string{
-		"message": "ok",
-	})
+	context.Writer.Header().Set("Content-Type", "application/json")
+	context.Writer.WriteHeader(http.StatusOK)
+	_, _ = context.Writer.Write(okBody)
 }
 
 func (context *GemContext) NOTFOUND() {
-	context.ToJSON(http.StatusNotFound, map[string]string{
-		"error": "not found",
-	})
+	context.Writer.Header().Set("Content-Type", "application/json")
+	context.Writer.WriteHeader(http.StatusNotFound)
+	_, _ = context.Writer.Write(notFoundBody)
 }
 
 func (context *GemContext) Query(key string) string {
@@ -131,12 +166,17 @@ func (context *GemContext) Param(key string) string {
 }
 
 func (context *GemContext) Set(key string, val any) {
-	context.Keys[key] = val
+	if context.Store == nil {
+		context.Store = &ContextStore{}
+	}
+	context.Store.Set(key, val)
 }
 
 func (context *GemContext) Get(key string) (any, bool) {
-	val, ok := context.Keys[key]
-	return val, ok
+	if context.Store == nil {
+		return nil, false
+	}
+	return context.Store.Get(key)
 }
 
 func (context *GemContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
