@@ -23,7 +23,6 @@ type GemRouter struct {
 	Addr              string
 	Port              string
 	middlewares       []Middleware
-	NotFound          GemHandler
 	MethodNotAllowed  GemHandler
 	Health            GemHandler
 	shutdownTimeout   time.Duration
@@ -33,6 +32,7 @@ type GemRouter struct {
 	corsSet           bool
 	stdout            *rawModeWriter
 	logger            *slog.Logger
+	logHandlers       bool
 	logCloser         io.Closer
 	trustProxy        bool
 	responseFormatter ResponseFormatter
@@ -68,9 +68,9 @@ func newBaseRouter() *GemRouter {
 		idleTimeout:       120 * time.Second,
 		stdout:            stdout,
 		logger:            newDefaultLogger(stdout),
+		logHandlers:       true,
 		responseFormatter: defaultResponseFormatter,
 		errorFormatter:    defaultErrorFormatter,
-		NotFound:          func(ctx *GemContext) { ctx.NOTFOUND() },
 		MethodNotAllowed:  defaultMethodNotAllowed,
 		Health:            func(ctx *GemContext) { ctx.OK() },
 	}
@@ -134,16 +134,8 @@ func (r *GemRouter) DELETE(pattern string, handler GemHandler) {
 	r.handle(http.MethodDelete, pattern, handler)
 }
 
-func (r *GemRouter) NoRoute(handler GemHandler) {
-	r.NotFound = handler
-	notFoundFinal := buildChain(handler, r.middlewares)
+func (r *GemRouter) NoRoute() {
 	methodNotAllowedFinal := buildChain(r.MethodNotAllowed, r.middlewares)
-
-	r.mux.NotFound = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		ctx := r.newContext(w, req)
-		defer r.releaseContext(ctx)
-		notFoundFinal(ctx)
-	})
 
 	r.mux.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := r.newContext(w, req)
@@ -157,12 +149,10 @@ func (r *GemRouter) Run() error {
 	r.logger.Info("Starting server " + r.name + "@" + r.version)
 
 	r.GET("/health", r.Health)
-	r.NoRoute(r.NotFound)
+	r.NoRoute()
 
 	addr := r.Addr + ":" + r.Port
 
-	// SIGTERM always triggers immediate shutdown.
-	// SIGINT is only used in non-TTY mode (pipes, Docker, CI).
 	termCh := make(chan os.Signal, 1)
 	intCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, syscall.SIGTERM)
@@ -187,7 +177,7 @@ func (r *GemRouter) Run() error {
 					if _, err := os.Stdin.Read(b); err != nil {
 						return
 					}
-					if b[0] == 0x03 || b[0] == 0x04 { // Ctrl+C, Ctrl+D
+					if b[0] == 0x03 || b[0] == 0x04 {
 						inputCh <- struct{}{}
 					}
 				}
@@ -314,7 +304,9 @@ func (r *GemRouter) handle(method, pattern string, handler GemHandler, extra ...
 		finalHandler(ctx)
 	})
 
-	r.logger.Info("Endpoint registered ✅", "method", method, "endpoint", pattern)
+	if r.logHandlers {
+		r.logger.Info("Endpoint registered ✅", "method", method, "endpoint", pattern)
+	}
 }
 
 func buildChain(handler GemHandler, base []Middleware, extra ...Middleware) GemHandler {

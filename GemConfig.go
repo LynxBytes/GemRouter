@@ -77,12 +77,6 @@ func WithMiddleware(middleware Middleware) GemConfig {
 	}
 }
 
-func WithNotFound(handler GemHandler) GemConfig {
-	return func(router *GemRouter) {
-		router.NotFound = handler
-	}
-}
-
 func WithMethodNotAllowed(handler GemHandler) GemConfig {
 	return func(router *GemRouter) {
 		router.MethodNotAllowed = handler

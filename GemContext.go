@@ -104,14 +104,11 @@ func (context *GemContext) NoContent(code int) {
 	context.Writer.WriteHeader(code)
 }
 
-// Success writes a formatted success response using the configured ResponseFormatter.
 func (context *GemContext) Success(code int, data any) {
 	finalCode, finalData := context.responseFormatter(code, data)
 	context.ToJSON(finalCode, finalData)
 }
 
-// Fail writes a formatted error response using the configured ErrorFormatter.
-// Accepts one or more errors: strings, []ValidationError, or any custom type.
 func (context *GemContext) Fail(code int, errs ...any) {
 	finalCode, finalData := context.errorFormatter(code, errs)
 	context.ToJSON(finalCode, finalData)

@@ -15,7 +15,9 @@ import (
 */
 
 func newBenchRouter() *GemRouter {
-	return BasicGemRouter()
+	router := BasicGemRouter()
+	router.logHandlers = false
+	return router
 }
 
 func BenchmarkRouter_Ping(b *testing.B) {
