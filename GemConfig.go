@@ -39,6 +39,18 @@ type CorsConfig struct {
 	MaxAge           int
 }
 
+func WithName(name string) GemConfig {
+	return func(router *GemRouter) {
+		router.name = name
+	}
+}
+
+func WithVersion(version string) GemConfig {
+	return func(router *GemRouter) {
+		router.version = version
+	}
+}
+
 func WithAddr(addr string) GemConfig {
 	return func(router *GemRouter) {
 		router.Addr = addr

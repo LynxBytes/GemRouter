@@ -15,6 +15,8 @@ import (
 
 type GemRouter struct {
 	mux              *httprouter.Router
+	name             string
+	version          string
 	Addr             string
 	Port             string
 	middlewares      []Middleware
@@ -48,6 +50,8 @@ func newHTTPRouter() *httprouter.Router {
 func newBaseRouter() *GemRouter {
 	r := &GemRouter{
 		mux:              newHTTPRouter(),
+		name:             "GemRouter Server",
+		version:          "v0.0.0",
 		Addr:             "0.0.0.0",
 		Port:             "8080",
 		shutdownTimeout:  5 * time.Second,
@@ -134,8 +138,8 @@ func (r *GemRouter) NoRoute(handler GemHandler) {
 }
 
 func (r *GemRouter) Run() error {
-	r.logger.Info(banner)
-	r.logger.Info("Starting server")
+	slog.Info(banner)
+	r.logger.Info("Starting server " + r.version)
 
 	r.GET("/health", r.Health)
 	r.NoRoute(r.NotFound)
