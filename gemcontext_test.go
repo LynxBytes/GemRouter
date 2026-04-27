@@ -226,7 +226,7 @@ func TestPath(t *testing.T) {
 
 func TestParam(t *testing.T) {
 	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/users/{id}", func(ctx *gemrouter.GemContext) {
+		r.GET("/users/:id", func(ctx *gemrouter.GemContext) {
 			ctx.String(http.StatusOK, ctx.Param("id"))
 		})
 	})

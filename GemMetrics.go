@@ -90,8 +90,7 @@ func (m *gemMetrics) middleware() Middleware {
 
 			next(ctx)
 
-			// req.Pattern includes method prefix ("GET /users/{id}") — strip it
-			pattern := ctx.Request.Pattern
+			pattern := ctx.Pattern
 			if i := strings.IndexByte(pattern, ' '); i >= 0 {
 				pattern = pattern[i+1:]
 			}

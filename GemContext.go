@@ -2,61 +2,22 @@ package gemrouter
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/bytedance/sonic"
+	"github.com/julienschmidt/httprouter"
 )
 
 const maxRequestBodySize = 4 << 20 // 4 MB
-
-type responseWriter struct {
-	http.ResponseWriter
-	status  int
-	written bool
-}
-
-func (rw *responseWriter) WriteHeader(code int) {
-	if rw.written {
-		return
-	}
-	rw.status = code
-	rw.written = true
-	rw.ResponseWriter.WriteHeader(code)
-}
-
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	if !rw.written {
-		rw.WriteHeader(http.StatusOK)
-	}
-	return rw.ResponseWriter.Write(b)
-}
-
-type ContextStore struct {
-	RequestID string
-	UserID    string
-	data      map[string]any
-}
-
-func (store *ContextStore) Set(key string, val any) {
-	if store.data == nil {
-		store.data = make(map[string]any, 4)
-	}
-	store.data[key] = val
-}
-
-func (store *ContextStore) Get(key string) (any, bool) {
-	if store.data == nil {
-		return nil, false
-	}
-	v, ok := store.data[key]
-	return v, ok
-}
 
 type GemContext struct {
 	Writer     http.ResponseWriter
 	Request    *http.Request
 	Store      *ContextStore
-	Logger     GemLogger
+	Logger     *slog.Logger
+	Pattern    string
+	params     httprouter.Params
 	rw         *responseWriter
 	rwBuf      responseWriter
 	trustProxy bool
@@ -102,7 +63,7 @@ func (context *GemContext) Status(code int) {
 func (context *GemContext) String(code int, text string) {
 	context.Writer.WriteHeader(code)
 	if _, err := io.WriteString(context.Writer, text); err != nil {
-		context.Logger.Error("write error", map[string]any{"error": err})
+		context.Logger.Error("write error", slog.Any("error", err))
 	}
 }
 
@@ -115,7 +76,7 @@ func (context *GemContext) FromJSON(data any) error {
 func (context *GemContext) ToJSON(code int, data any) {
 	b, err := sonic.Marshal(data)
 	if err != nil {
-		context.Logger.Error("json encode error", map[string]any{"error": err})
+		context.Logger.Error("json encode error", slog.Any("error", err))
 		return
 	}
 	context.Writer.Header().Set("Content-Type", "application/json")
@@ -128,9 +89,16 @@ func (context *GemContext) NoContent(code int) {
 }
 
 var (
-	okBody       = []byte(`{"message":"ok"}` + "\n")
-	notFoundBody = []byte(`{"error":"not found"}` + "\n")
+	okBody               = []byte(`{"message":"ok"}` + "\n")
+	notFoundBody         = []byte(`{"error":"not found"}` + "\n")
+	methodNotAllowedBody = []byte(`{"error":"method not allowed"}` + "\n")
 )
+
+var defaultMethodNotAllowed GemHandler = func(ctx *GemContext) {
+	ctx.Writer.Header().Set("Content-Type", "application/json")
+	ctx.Writer.WriteHeader(http.StatusMethodNotAllowed)
+	_, _ = ctx.Writer.Write(methodNotAllowedBody)
+}
 
 func (context *GemContext) OK() {
 	context.Writer.Header().Set("Content-Type", "application/json")
@@ -161,7 +129,7 @@ func (context *GemContext) Path() string {
 }
 
 func (context *GemContext) Param(key string) string {
-	return context.Request.PathValue(key)
+	return context.params.ByName(key)
 }
 
 func (context *GemContext) Set(key string, val any) {

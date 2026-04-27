@@ -1,6 +1,7 @@
 package gemrouter
 
 import (
+	"log/slog"
 	"time"
 )
 
@@ -69,13 +70,19 @@ func WithNotFound(handler GemHandler) GemConfig {
 	}
 }
 
+func WithMethodNotAllowed(handler GemHandler) GemConfig {
+	return func(router *GemRouter) {
+		router.MethodNotAllowed = handler
+	}
+}
+
 func WithHealth(handler GemHandler) GemConfig {
 	return func(router *GemRouter) {
 		router.Health = handler
 	}
 }
 
-func WithLogger(l GemLogger) GemConfig {
+func WithLogger(l *slog.Logger) GemConfig {
 	return func(router *GemRouter) {
 		router.logger = l
 	}

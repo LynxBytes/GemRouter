@@ -40,7 +40,7 @@ func TestRaceConcurrentRequests(t *testing.T) {
 // TestRaceKeysIsolation verifica que ctx.Keys no se filtra entre requests concurrentes.
 func TestRaceKeysIsolation(t *testing.T) {
 	srv := newTestServer(func(r *gemrouter.GemRouter) {
-		r.GET("/echo/{id}", func(ctx *gemrouter.GemContext) {
+		r.GET("/echo/:id", func(ctx *gemrouter.GemContext) {
 			id := ctx.Param("id")
 			ctx.Set("id", id)
 			got, _ := ctx.Get("id")

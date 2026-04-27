@@ -4,13 +4,15 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"net"
 	"net/http"
 	"runtime/debug"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 type Middleware func(GemHandler) GemHandler
@@ -19,10 +21,10 @@ func Recovery(next GemHandler) GemHandler {
 	return func(ctx *GemContext) {
 		defer func() {
 			if r := recover(); r != nil {
-				ctx.Logger.Error("panic recovered", map[string]any{
-					"error": r,
-					"stack": string(debug.Stack()),
-				})
+				ctx.Logger.Error("panic recovered",
+					slog.Any("error", r),
+					slog.String("stack", string(debug.Stack())),
+				)
 				if !ctx.rw.written {
 					ctx.ToJSON(500, map[string]string{"error": "internal server error"})
 				}
@@ -32,35 +34,27 @@ func Recovery(next GemHandler) GemHandler {
 	}
 }
 
-var logFieldsPool = sync.Pool{
-	New: func() any { return make(map[string]any, 8) },
-}
-
 func Logger(next GemHandler) GemHandler {
 	return func(ctx *GemContext) {
 		start := time.Now()
 		reqID := newRequestID()
 		ctx.Store.RequestID = reqID
 
-		in := logFieldsPool.Get().(map[string]any)
-		in["request_id"] = reqID
-		in["method"] = ctx.Request.Method
-		in["path"] = ctx.Request.URL.Path
-		in["ip"] = clientIP(ctx.Request, ctx.trustProxy)
-		in["user_agent"] = ctx.Request.UserAgent()
-		ctx.Logger.Info("→", in)
-		clear(in)
-		logFieldsPool.Put(in)
+		ctx.Logger.Info("→",
+			slog.String("request_id", reqID),
+			slog.String("method", ctx.Request.Method),
+			slog.String("path", ctx.Request.URL.Path),
+			slog.String("ip", clientIP(ctx.Request, ctx.trustProxy)),
+			slog.String("user_agent", ctx.Request.UserAgent()),
+		)
 
 		next(ctx)
 
-		out := logFieldsPool.Get().(map[string]any)
-		out["request_id"] = reqID
-		out["status"] = ctx.StatusCode()
-		out["latency"] = time.Since(start).String()
-		ctx.Logger.Info("←", out)
-		clear(out)
-		logFieldsPool.Put(out)
+		ctx.Logger.Info("←",
+			slog.String("request_id", reqID),
+			slog.Int("status", ctx.StatusCode()),
+			slog.Duration("latency", time.Since(start)),
+		)
 	}
 }
 
@@ -199,7 +193,7 @@ func WithPrometheus(metricsPath string) GemConfig {
 		m := newGemMetrics()
 		r.middlewares = append(r.middlewares, m.middleware())
 		handler := m.handler()
-		r.mux.HandleFunc("GET "+metricsPath, func(w http.ResponseWriter, req *http.Request) {
+		r.mux.GET(metricsPath, func(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 			ctx := r.newContext(w, req)
 			defer r.releaseContext(ctx)
 			handler(ctx)

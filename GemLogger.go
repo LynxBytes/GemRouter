@@ -1,42 +1,19 @@
 package gemrouter
 
 import (
-	"fmt"
-	"log"
-	"strings"
+	"io"
+	"log/slog"
+	"os"
 )
 
-type GemLogger interface {
-	Info(msg string, fields map[string]any)
-	Debug(msg string, fields map[string]any)
-	Warn(msg string, fields map[string]any)
-	Error(msg string, fields map[string]any)
+var defaultGemLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+	Level: slog.LevelInfo,
+}))
+
+func WithTextLogger(w io.Writer, level slog.Level) GemConfig {
+	return WithLogger(slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{Level: level})))
 }
 
-type stdLogger struct{}
-
-func (stdLogger) Debug(msg string, fields map[string]any) {
-	log.Printf("[GemRouter] DEBUG %s %s", msg, formatFields(fields))
+func WithJSONLogger(w io.Writer, level slog.Level) GemConfig {
+	return WithLogger(slog.New(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})))
 }
-
-func (stdLogger) Info(msg string, fields map[string]any) {
-	log.Printf("[GemRouter] INFO %s %s", msg, formatFields(fields))
-}
-
-func (stdLogger) Warn(msg string, fields map[string]any) {
-	log.Printf("[GemRouter] WARN %s %s", msg, formatFields(fields))
-}
-
-func (stdLogger) Error(msg string, fields map[string]any) {
-	log.Printf("[GemRouter] ERROR %s %s", msg, formatFields(fields))
-}
-
-func formatFields(fields map[string]any) string {
-	parts := make([]string, 0, len(fields))
-	for k, v := range fields {
-		parts = append(parts, fmt.Sprintf("%s=%v", k, v))
-	}
-	return strings.Join(parts, " ")
-}
-
-var defaultGemLogger GemLogger = stdLogger{}
