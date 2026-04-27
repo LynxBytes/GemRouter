@@ -1,13 +1,26 @@
-package internal
+package gemrouter
 
-import (
-	"net/http"
-)
+import "net/http"
 
 type GemGroup struct {
 	prefix      string
 	router      *GemRouter
 	middlewares []Middleware
+}
+
+func (g *GemGroup) Use(m Middleware) {
+	g.middlewares = append(g.middlewares, m)
+}
+
+func (g *GemGroup) Group(prefix string, middlewares ...Middleware) *GemGroup {
+	all := make([]Middleware, 0, len(g.middlewares)+len(middlewares))
+	all = append(all, g.middlewares...)
+	all = append(all, middlewares...)
+	return &GemGroup{
+		prefix:      g.prefix + prefix,
+		router:      g.router,
+		middlewares: all,
+	}
 }
 
 func (g *GemGroup) GET(pattern string, handler GemHandler) {

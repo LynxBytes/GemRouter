@@ -1,3 +1,3 @@
-package internal
+package gemrouter
 
 type GemHandler func(ctx *GemContext)
