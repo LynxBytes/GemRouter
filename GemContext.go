@@ -12,15 +12,17 @@ import (
 const maxRequestBodySize = 4 << 20 // 4 MB
 
 type GemContext struct {
-	Writer     http.ResponseWriter
-	Request    *http.Request
-	Store      *ContextStore
-	Logger     *slog.Logger
-	Pattern    string
-	params     httprouter.Params
-	rw         *responseWriter
-	rwBuf      responseWriter
-	trustProxy bool
+	Writer            http.ResponseWriter
+	Request           *http.Request
+	Store             *ContextStore
+	Logger            *slog.Logger
+	Pattern           string
+	params            httprouter.Params
+	rw                *responseWriter
+	rwBuf             responseWriter
+	trustProxy        bool
+	responseFormatter ResponseFormatter
+	errorFormatter    ErrorFormatter
 }
 
 func (context *GemContext) Copy() *GemContext {
@@ -86,6 +88,19 @@ func (context *GemContext) ToJSON(code int, data any) {
 
 func (context *GemContext) NoContent(code int) {
 	context.Writer.WriteHeader(code)
+}
+
+// Success writes a formatted success response using the configured ResponseFormatter.
+func (context *GemContext) Success(code int, data any) {
+	finalCode, finalData := context.responseFormatter(code, data)
+	context.ToJSON(finalCode, finalData)
+}
+
+// Fail writes a formatted error response using the configured ErrorFormatter.
+// Accepts one or more errors: strings, []ValidationError, or any custom type.
+func (context *GemContext) Fail(code int, errs ...any) {
+	finalCode, finalData := context.errorFormatter(code, errs)
+	context.ToJSON(finalCode, finalData)
 }
 
 var (

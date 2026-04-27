@@ -26,16 +26,16 @@ Requires Go 1.22+
 ```go
 package main
 
-import gemrouter "github.com/LynxBytes/GemRouter"
+import gem "github.com/LynxBytes/GemRouter"
 
 func main() {
-    r := gemrouter.DefaultGemRouter()
+    r := gem.DefaultGemRouter()
 
-    r.GET("/ping", func(ctx *gemrouter.GemContext) {
-        ctx.ToJSON(200, gemrouter.JSON{"message": "pong"})
+    r.GET("/ping", func(ctx *gem.GemContext) {
+        ctx.ToJSON(200, gem.JSON{"message": "pong"})
     })
 
-    if err := GemRouter.Run(); err != nil {
+    if err := r.Run(); err != nil {
         log.Fatalf("failed to run server: %v", err)
     }
 }
@@ -50,10 +50,10 @@ func main() {
 | `NewGemRouter(configs...)` | Recovery               | configurable |
 
 ```go
-r := gemrouter.NewGemRouter(
-    gemrouter.WithPort("3000"),
-    gemrouter.WithCorsDefault(),
-    gemrouter.WithJSONLogger(os.Stdout, slog.LevelInfo),
+r := gem.NewGemRouter(
+    gem.WithPort("3000"),
+    gem.WithCorsDefault(),
+    gem.WithJSONLogger(os.Stdout, slog.LevelInfo),
 )
 ```
 
@@ -71,13 +71,13 @@ r.DELETE("/users/:id", handler)
 
 ```go
 // path param
-r.GET("/users/:id", func(ctx *gemrouter.GemContext) {
+r.GET("/users/:id", func(ctx *gem.GemContext) {
     id := ctx.Param("id")
-    ctx.ToJSON(200, gemrouter.JSON{"id": id})
+    ctx.ToJSON(200, gem.JSON{"id": id})
 })
 
 // query param
-r.GET("/search", func(ctx *gemrouter.GemContext) {
+r.GET("/search", func(ctx *gem.GemContext) {
     q := ctx.Query("q")
     ctx.String(200, q)
 })
@@ -90,12 +90,12 @@ r.GET("/files/*path", handler)
 
 ```go
 // write
-ctx.ToJSON(200, gemrouter.JSON{"user": "mario", "age": 30})
+ctx.ToJSON(200, gem.JSON{"user": "mario", "age": 30})
 
 // read
 var body CreateUserRequest
 if err := ctx.FromJSON(&body); err != nil {
-    ctx.ToJSON(400, gemrouter.JSON{"error": err.Error()})
+    ctx.ToJSON(400, gem.JSON{"error": err.Error()})
     return
 }
 ```
@@ -105,20 +105,20 @@ if err := ctx.FromJSON(&body); err != nil {
 Built-in validator, no dependencies. Supports `required`, `min=N`, `max=N`, `len=N`, `email`.
 
 ```go
-r.POST("/users", func(ctx *gemrouter.GemContext) {
+r.POST("/users", func(ctx *gem.GemContext) {
     var body CreateUserRequest
     if err := ctx.FromJSON(&body); err != nil {
-        ctx.ToJSON(400, gemrouter.JSON{"error": err.Error()})
+        ctx.ToJSON(400, gem.JSON{"error": err.Error()})
         return
     }
 
-    v := gemrouter.NewValidator().
+    v := gem.NewValidator().
         Check("name",  body.Name,  "required,min=2,max=50").
         Check("email", body.Email, "required,email").
         Check("age",   body.Age,   "min=18,max=120")
 
     if !v.Valid() {
-        ctx.ToJSON(400, gemrouter.JSON{"errors": v.Errors()})
+        ctx.ToJSON(400, gem.JSON{"errors": v.Errors()})
         return
     }
 
@@ -145,6 +145,90 @@ Error response:
 | `len=N` | string | exact length |
 | `email` | string | valid email format |
 
+## Response formatters
+
+Configure a global shape for all success and error responses without touching each handler.
+
+### Success responses
+
+```go
+r := gem.NewGemRouter(
+    gem.WithResponseFormatter(func(code int, data any) (int, any) {
+        return code, gem.JSON{
+            "success": true,
+            "data":    data,
+        }
+    }),
+)
+
+// in handlers
+ctx.Success(200, user) // → {"success":true,"data":{...}}
+```
+
+Default (no formatter configured): `ctx.Success(code, data)` behaves identically to `ctx.ToJSON(code, data)`.
+
+### Error responses
+
+`ctx.Fail` is variadic — accepts one or more errors of any type.
+
+```go
+r := gem.NewGemRouter(
+    gem.WithErrorFormatter(func(code int, errs []any) (int, any) {
+        return code, gem.JSON{
+            "success": false,
+            "errors":  errs,
+            "code":    code,
+        }
+    }),
+)
+```
+
+Default behavior without a formatter:
+
+```go
+// single string → {"error":"..."}
+ctx.Fail(400, "invalid email")
+
+// multiple strings → {"errors":["...","..."]}
+ctx.Fail(400, "name required", "email invalid")
+
+// ValidationError slice → {"errors":[{"field":"...","message":"..."},...]}
+ctx.Fail(422, v.Errors())
+```
+
+### Both together (typical REST API)
+
+```go
+r := gem.NewGemRouter(
+    gem.WithResponseFormatter(func(code int, data any) (int, any) {
+        return code, gem.JSON{"success": true, "data": data}
+    }),
+    gem.WithErrorFormatter(func(code int, errs []any) (int, any) {
+        return code, gem.JSON{"success": false, "errors": errs}
+    }),
+)
+
+r.POST("/users", func(ctx *gem.GemContext) {
+    var body CreateUserRequest
+    if err := ctx.FromJSON(&body); err != nil {
+        ctx.Fail(400, "invalid body")
+        return
+    }
+
+    v := gem.NewValidator().
+        Check("name",  body.Name,  "required,min=2").
+        Check("email", body.Email, "required,email")
+    if !v.Valid() {
+        ctx.Fail(422, v.Errors()) // → {"success":false,"errors":[...]}
+        return
+    }
+
+    ctx.Success(201, body) // → {"success":true,"data":{...}}
+})
+```
+
+The formatter can also override the status code by returning a different value as the first argument.
+
 ## Middlewares
 
 ```go
@@ -159,11 +243,11 @@ api.GET("/users", handler)
 Writing a middleware:
 
 ```go
-func AuthMiddleware(next gemrouter.GemHandler) gemrouter.GemHandler {
-    return func(ctx *gemrouter.GemContext) {
+func AuthMiddleware(next gem.GemHandler) gem.GemHandler {
+    return func(ctx *gem.GemContext) {
         token := ctx.Header("Authorization")
         if !isValid(token) {
-            ctx.ToJSON(401, gemrouter.JSON{"error": "unauthorized"})
+            ctx.ToJSON(401, gem.JSON{"error": "unauthorized"})
             return // chain stops here
         }
         next(ctx)
@@ -188,7 +272,7 @@ v2.GET("/users", getUsersV2)
 
 ```go
 // CORS
-gemrouter.WithCors(&gemrouter.CorsConfig{
+gem.WithCors(&gem.CorsConfig{
     AllowOrigins: []string{"https://example.com"},
     AllowMethods: []string{"GET", "POST", "PUT", "DELETE"},
     AllowHeaders: []string{"Content-Type", "Authorization"},
@@ -196,27 +280,149 @@ gemrouter.WithCors(&gemrouter.CorsConfig{
 })
 
 // Timeout
-r.Use(gemrouter.Timeout(5 * time.Second))
+r.Use(gem.Timeout(5 * time.Second))
 
 // Prometheus metrics
-r := gemrouter.NewGemRouter(
-    gemrouter.WithPrometheus("/metrics"),
+r := gem.NewGemRouter(
+    gem.WithPrometheus("/metrics"),
 )
 ```
 
 ## Logging
 
+### Writer-based (stdout / any io.Writer)
+
 ```go
-// text (default)
-gemrouter.WithTextLogger(os.Stdout, slog.LevelInfo)
+// text
+gem.WithTextLogger(os.Stdout, slog.LevelInfo)
 
 // JSON
-gemrouter.WithJSONLogger(os.Stdout, slog.LevelInfo)
+gem.WithJSONLogger(os.Stdout, slog.LevelInfo)
 
 // custom slog logger
-gemrouter.WithLogger(mySlogLogger)
+gem.WithLogger(mySlogLogger)
+```
 
-// use logger inside handler
+### File
+
+```go
+// text → file only
+gem.WithTextFileLogger("logs/app.log", slog.LevelInfo)
+
+// JSON → file only
+gem.WithJSONFileLogger("logs/app.log", slog.LevelInfo)
+
+// text → stdout + file
+gem.WithTextTeeLogger("logs/app.log", slog.LevelInfo)
+
+// JSON → stdout + file
+gem.WithJSONTeeLogger("logs/app.log", slog.LevelInfo)
+```
+
+Files open in append mode. Invalid paths fall back to stdout automatically.
+
+### Log rotation
+
+Uses [lumberjack](https://github.com/natefinch/lumberjack) under the hood. No external config needed.
+
+```go
+cfg := gem.LogRotateConfig{
+    Path:       "logs/app.log",
+    MaxSizeMB:  100,  // rotate after 100 MB
+    MaxBackups: 5,    // keep 5 old files
+    MaxAgeDays: 30,   // delete files older than 30 days
+    Compress:   true, // gzip rotated files
+}
+
+// text → rotating file
+gem.WithTextRotateLogger(cfg, slog.LevelInfo)
+
+// JSON → rotating file
+gem.WithJSONRotateLogger(cfg, slog.LevelInfo)
+
+// text → stdout + rotating file
+gem.WithTextTeeRotateLogger(cfg, slog.LevelInfo)
+
+// JSON → stdout + rotating file
+gem.WithJSONTeeRotateLogger(cfg, slog.LevelInfo)
+```
+
+The log file is closed automatically on graceful shutdown.
+
+### Split format (text console + JSON file)
+
+When you want human-readable output in the terminal and structured JSON in the file at the same time:
+
+```go
+// slog: text → stdout, JSON → file
+gem.WithSplitLogger("logs/app.log", slog.LevelInfo)
+
+// slog: text → stdout, JSON → rotating file
+gem.WithSplitRotateLogger(gem.LogRotateConfig{
+    Path:       "logs/app.log",
+    MaxSizeMB:  100,
+    MaxBackups: 5,
+    Compress:   true,
+}, slog.LevelInfo)
+```
+
+Each destination gets its own encoder — the same log record is written twice, independently.
+
+### Zap (optional)
+
+Zap is **not** a required dependency. Import the `zaplogger` subpackage only if you need it.
+
+```bash
+go get github.com/LynxBytes/GemRouter/zaplogger
+```
+
+```go
+import (
+    gem "github.com/LynxBytes/GemRouter"
+    "github.com/LynxBytes/GemRouter/zaplogger"
+    "go.uber.org/zap/zapcore"
+)
+
+// custom zap logger
+r := gem.NewGemRouter(
+    zaplogger.WithZapLogger(myZapLogger),
+)
+
+// zap → file only
+zaplogger.WithZapFileLogger("logs/app.log", zapcore.InfoLevel)
+
+// zap → stdout + file
+zaplogger.WithZapTeeLogger("logs/app.log", zapcore.InfoLevel)
+
+// zap → rotating file
+zaplogger.WithZapRotateLogger(gem.LogRotateConfig{
+    Path:       "logs/app.log",
+    MaxSizeMB:  100,
+    MaxBackups: 5,
+    Compress:   true,
+}, zapcore.InfoLevel)
+
+// zap → stdout + rotating file
+zaplogger.WithZapTeeRotateLogger(cfg, zapcore.InfoLevel)
+
+// zap → stdout + custom writer
+zaplogger.WithZapTeeWriter(myWriter, zapcore.InfoLevel)
+
+// zap split: console encoder → stdout, JSON → file
+zaplogger.WithZapSplitLogger("logs/app.log", zapcore.InfoLevel)
+
+// zap split: console encoder → stdout, JSON → rotating file
+zaplogger.WithZapSplitRotateLogger(gem.LogRotateConfig{
+    Path:       "logs/app.log",
+    MaxSizeMB:  100,
+    MaxBackups: 5,
+    Compress:   true,
+}, zapcore.InfoLevel)
+```
+
+### Inside handlers
+
+```go
 ctx.Logger.Info("user created", slog.String("id", user.ID))
 ```
 
@@ -243,15 +449,15 @@ ctx.DeleteCookie("session")
 ## Custom handlers
 
 ```go
-r := gemrouter.NewGemRouter(
-    gemrouter.WithNotFound(func(ctx *gemrouter.GemContext) {
-        ctx.ToJSON(404, gemrouter.JSON{"error": "not found"})
+r := gem.NewGemRouter(
+    gem.WithNotFound(func(ctx *gem.GemContext) {
+        ctx.ToJSON(404, gem.JSON{"error": "not found"})
     }),
-    gemrouter.WithMethodNotAllowed(func(ctx *gemrouter.GemContext) {
-        ctx.ToJSON(405, gemrouter.JSON{"error": "method not allowed"})
+    gem.WithMethodNotAllowed(func(ctx *gem.GemContext) {
+        ctx.ToJSON(405, gem.JSON{"error": "method not allowed"})
     }),
-    gemrouter.WithHealth(func(ctx *gemrouter.GemContext) {
-        ctx.ToJSON(200, gemrouter.JSON{"status": "ok"})
+    gem.WithHealth(func(ctx *gem.GemContext) {
+        ctx.ToJSON(200, gem.JSON{"status": "ok"})
     }),
 )
 ```
@@ -261,8 +467,8 @@ r := gemrouter.NewGemRouter(
 Built-in. `Run()` listens for `SIGINT` and `SIGTERM` and shuts down cleanly.
 
 ```go
-r := gemrouter.NewGemRouter(
-    gemrouter.WithShutdownTimeout(10 * time.Second),
+r := gem.NewGemRouter(
+    gem.WithShutdownTimeout(10 * time.Second),
 )
 r.Run() // blocks until signal
 ```

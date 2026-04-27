@@ -1,6 +1,7 @@
 package gem
 
 import (
+	"io"
 	"log/slog"
 	"time"
 )
@@ -141,5 +142,23 @@ func WithWriteTimeout(d time.Duration) GemConfig {
 func WithIdleTimeout(d time.Duration) GemConfig {
 	return func(router *GemRouter) {
 		router.idleTimeout = d
+	}
+}
+
+func WithLogCloser(c io.Closer) GemConfig {
+	return func(router *GemRouter) {
+		router.logCloser = c
+	}
+}
+
+func WithResponseFormatter(f ResponseFormatter) GemConfig {
+	return func(router *GemRouter) {
+		router.responseFormatter = f
+	}
+}
+
+func WithErrorFormatter(f ErrorFormatter) GemConfig {
+	return func(router *GemRouter) {
+		router.errorFormatter = f
 	}
 }
