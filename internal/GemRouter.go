@@ -1,7 +1,8 @@
-package gemrouter
+package internal
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -85,6 +86,10 @@ func (r *GemRouter) NoRoute(handler GemHandler) {
 }
 
 func (r *GemRouter) Run() error {
+	log.Println(`                                                             
+ ▄████  ▄▄▄▄▄ ▄▄   ▄▄ █████▄   ▄▄▄  ▄▄ ▄▄ ▄▄▄▄▄▄ ▄▄▄▄▄ ▄▄▄▄  
+██  ▄▄▄ ██▄▄  ██▀▄▀██ ██▄▄██▄ ██▀██ ██ ██   ██   ██▄▄  ██▄█▄ 
+ ▀███▀  ██▄▄▄ ██   ██ ██   ██ ▀███▀ ▀███▀   ██   ██▄▄▄ ██ ██\n`)
 	r.GET("/health", r.Health)
 	r.NoRoute(r.NotFound)
 

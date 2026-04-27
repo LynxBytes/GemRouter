@@ -1,4 +1,4 @@
-package gemrouter
+package internal
 
 import (
 	"encoding/json"
@@ -50,7 +50,7 @@ func (context *GemContext) String(code int, text string) {
 	}
 }
 
-func (context *GemContext) JSON(data any) error {
+func (context *GemContext) FromJSON(data any) error {
 	defer context.Request.Body.Close()
 	return json.NewDecoder(context.Request.Body).Decode(data)
 }
@@ -75,7 +75,7 @@ func (context *GemContext) OK() {
 
 func (context *GemContext) NOTFOUND() {
 	context.ToJSON(http.StatusNotFound, map[string]string{
-		"error": "page not found",
+		"error": "Method not found",
 	})
 }
 
@@ -106,4 +106,32 @@ func (context *GemContext) Set(key string, val any) {
 func (context *GemContext) Get(key string) (any, bool) {
 	val, ok := context.Keys[key]
 	return val, ok
+}
+
+func (context *GemContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
+	http.SetCookie(context.Writer, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		MaxAge:   maxAge,
+		Path:     path,
+		Domain:   domain,
+		Secure:   secure,
+		HttpOnly: httpOnly,
+	})
+}
+
+func (context *GemContext) Cookie(name string) (string, error) {
+	c, err := context.Request.Cookie(name)
+	if err != nil {
+		return "", err
+	}
+	return c.Value, nil
+}
+
+func (context *GemContext) DeleteCookie(name string) {
+	http.SetCookie(context.Writer, &http.Cookie{
+		Name:   name,
+		Value:  "",
+		MaxAge: -1,
+	})
 }

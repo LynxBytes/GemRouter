@@ -1,4 +1,4 @@
-package gemrouter
+package internal
 
 type GemConfig func(router *GemRouter)
 

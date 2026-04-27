@@ -1,4 +1,4 @@
-package gemrouter
+package internal
 
 import (
 	"log"

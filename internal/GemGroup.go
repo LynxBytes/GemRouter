@@ -1,6 +1,8 @@
-package gemrouter
+package internal
 
-import "net/http"
+import (
+	"net/http"
+)
 
 type GemGroup struct {
 	prefix      string
