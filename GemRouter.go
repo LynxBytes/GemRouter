@@ -1,8 +1,7 @@
-package gemrouter
+package gem
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -135,13 +134,16 @@ func (r *GemRouter) NoRoute(handler GemHandler) {
 }
 
 func (r *GemRouter) Run() error {
-	log.Println(banner)
+	r.logger.Info(banner)
+	r.logger.Info("Starting server")
 
 	r.GET("/health", r.Health)
 	r.NoRoute(r.NotFound)
 
+	addr := r.Addr + ":" + r.Port
+
 	srv := &http.Server{
-		Addr:         r.Addr + ":" + r.Port,
+		Addr:         addr,
 		Handler:      r.mux,
 		ReadTimeout:  r.readTimeout,
 		WriteTimeout: r.writeTimeout,
@@ -156,6 +158,8 @@ func (r *GemRouter) Run() error {
 	go func() {
 		errCh <- srv.ListenAndServe()
 	}()
+
+	r.logger.Info("Server up: " + addr)
 
 	select {
 	case err := <-errCh:
@@ -211,6 +215,8 @@ func (r *GemRouter) handle(method, pattern string, handler GemHandler, extra ...
 		defer r.releaseContext(ctx)
 		finalHandler(ctx)
 	})
+
+	r.logger.Info("Endpoint registered ✅", "method", method, "endpoint", pattern)
 }
 
 func buildChain(handler GemHandler, base []Middleware, extra ...Middleware) GemHandler {

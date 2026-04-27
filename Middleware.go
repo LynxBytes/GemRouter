@@ -1,4 +1,4 @@
-package gemrouter
+package gem
 
 import (
 	"context"

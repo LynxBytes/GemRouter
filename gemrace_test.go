@@ -1,4 +1,4 @@
-package gemrouter_test
+package gem_test
 
 import (
 	"fmt"
