@@ -1,12 +1,7 @@
 package gem
 
-// ResponseFormatter transforms a success response before writing.
-// Returns the final status code and body to serialize.
 type ResponseFormatter func(code int, data any) (int, any)
 
-// ErrorFormatter transforms an error response before writing.
-// errs contains one or more errors: strings, ValidationError slices, or any custom type.
-// Returns the final status code and body to serialize.
 type ErrorFormatter func(code int, errs []any) (int, any)
 
 var defaultResponseFormatter ResponseFormatter = func(code int, data any) (int, any) {

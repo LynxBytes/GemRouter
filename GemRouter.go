@@ -263,6 +263,10 @@ func (r *GemRouter) Run() error {
 	}
 }
 
+func (r *GemRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	r.mux.ServeHTTP(w, req)
+}
+
 func (r *GemRouter) Group(prefix string, middlewares ...Middleware) *GemGroup {
 	return &GemGroup{prefix: prefix, router: r, middlewares: middlewares}
 }

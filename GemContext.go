@@ -25,6 +25,20 @@ type GemContext struct {
 	errorFormatter    ErrorFormatter
 }
 
+func NewTestContext(w http.ResponseWriter, r *http.Request) *GemContext {
+	ctx := &GemContext{
+		Request:           r,
+		Store:             &ContextStore{},
+		Logger:            slog.Default(),
+		responseFormatter: defaultResponseFormatter,
+		errorFormatter:    defaultErrorFormatter,
+	}
+	ctx.rwBuf.ResponseWriter = w
+	ctx.rw = &ctx.rwBuf
+	ctx.Writer = ctx.rw
+	return ctx
+}
+
 func (context *GemContext) Copy() *GemContext {
 	var storeCopy *ContextStore
 
