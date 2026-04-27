@@ -2,6 +2,7 @@ package gem
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,6 +18,7 @@ import (
 )
 
 type GemRouter struct {
+	routerVersion     string
 	mux               *httprouter.Router
 	name              string
 	version           string
@@ -57,6 +59,7 @@ func newHTTPRouter() *httprouter.Router {
 func newBaseRouter() *GemRouter {
 	stdout := &rawModeWriter{w: os.Stdout}
 	r := &GemRouter{
+		routerVersion:     "v0.0.17",
 		mux:               newHTTPRouter(),
 		name:              "GemRouter Server",
 		version:           "v0.0.0",
@@ -134,13 +137,22 @@ func (r *GemRouter) DELETE(pattern string, handler GemHandler) {
 	r.handle(http.MethodDelete, pattern, handler)
 }
 
-func (r *GemRouter) NoRoute() {
+func (r *GemRouter) HandleSystemErrors() {
 	methodNotAllowedFinal := buildChain(r.MethodNotAllowed, r.middlewares)
-
 	r.mux.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := r.newContext(w, req)
 		defer r.releaseContext(ctx)
 		methodNotAllowedFinal(ctx)
+	})
+
+	notFoundFinal := buildChain(func(ctx *GemContext) {
+		ctx.Fail(http.StatusNotFound, "Resource not found: "+ctx.Request.URL.Path)
+	}, r.middlewares)
+
+	r.mux.NotFound = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		ctx := r.newContext(w, req)
+		defer r.releaseContext(ctx)
+		notFoundFinal(ctx)
 	})
 }
 
@@ -149,23 +161,21 @@ func (r *GemRouter) Run() error {
 	r.logger.Info("Starting server " + r.name + "@" + r.version)
 
 	r.GET("/health", r.Health)
-	r.NoRoute()
+	r.HandleSystemErrors()
 
 	addr := r.Addr + ":" + r.Port
 
 	termCh := make(chan os.Signal, 1)
-	intCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, syscall.SIGTERM)
 	defer signal.Stop(termCh)
 
+	stopEventCh := make(chan struct{}, 1)
 	isTTY := term.IsTerminal(int(os.Stdin.Fd()))
+
 	var restoreTerm func()
 
-	inputCh := make(chan struct{}, 1)
-
 	if isTTY {
-		old, err := term.MakeRaw(int(os.Stdin.Fd()))
-		if err == nil {
+		if old, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
 			r.stdout.raw.Store(true)
 			restoreTerm = func() {
 				r.stdout.raw.Store(false)
@@ -178,27 +188,20 @@ func (r *GemRouter) Run() error {
 						return
 					}
 					if b[0] == 0x03 || b[0] == 0x04 {
-						inputCh <- struct{}{}
+						stopEventCh <- struct{}{}
 					}
 				}
 			}()
 		}
 	} else {
+		intCh := make(chan os.Signal, 1)
 		signal.Notify(intCh, syscall.SIGINT)
 		defer signal.Stop(intCh)
-	}
-
-	doShutdown := func(srv *http.Server) error {
-		if restoreTerm != nil {
-			restoreTerm()
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), r.shutdownTimeout)
-		defer cancel()
-		err := srv.Shutdown(ctx)
-		if r.logCloser != nil {
-			_ = r.logCloser.Close()
-		}
-		return err
+		go func() {
+			for range intCh {
+				stopEventCh <- struct{}{}
+			}
+		}()
 	}
 
 	srv := &http.Server{
@@ -216,34 +219,30 @@ func (r *GemRouter) Run() error {
 	sigintCount := 0
 	var resetTimer <-chan time.Time
 
+	defer func() {
+		if r.logCloser != nil {
+			_ = r.logCloser.Close()
+		}
+	}()
+
 	for {
 		select {
 		case err := <-errCh:
-			if r.logCloser != nil {
-				_ = r.logCloser.Close()
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
 			}
 			return err
 
 		case <-termCh:
-			return doShutdown(srv)
+			return r.doShutdown(srv, restoreTerm)
 
-		case <-intCh:
+		case <-stopEventCh:
 			sigintCount++
-			if sigintCount == 1 {
-				fmt.Fprint(os.Stderr, "\r\nPress Ctrl+C again to stop the server\r\n")
-				resetTimer = time.After(3 * time.Second)
-			} else {
-				return doShutdown(srv)
+			if sigintCount >= 2 {
+				return r.doShutdown(srv, restoreTerm)
 			}
-
-		case <-inputCh:
 			fmt.Fprint(os.Stderr, "\r\nPress Ctrl+C again to stop the server\r\n")
-			sigintCount++
-			if sigintCount == 1 {
-				resetTimer = time.After(3 * time.Second)
-			} else {
-				return doShutdown(srv)
-			}
+			resetTimer = time.After(3 * time.Second)
 
 		case <-resetTimer:
 			sigintCount = 0
@@ -251,6 +250,19 @@ func (r *GemRouter) Run() error {
 			fmt.Fprint(os.Stderr, "\r\nShutdown cancelled\r\n")
 		}
 	}
+}
+
+func (r *GemRouter) doShutdown(srv *http.Server, restoreTerm func()) error {
+	if restoreTerm != nil {
+		restoreTerm()
+	}
+
+	r.logger.Info("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), r.shutdownTimeout)
+	defer cancel()
+
+	return srv.Shutdown(ctx)
 }
 
 func (r *GemRouter) ServeHTTP(w http.ResponseWriter, req *http.Request) {

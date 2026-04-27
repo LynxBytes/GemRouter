@@ -1,6 +1,9 @@
 package gem
 
-import "net/http"
+import (
+	"net/http"
+	"slices"
+)
 
 type GemGroup struct {
 	prefix      string
@@ -13,13 +16,10 @@ func (g *GemGroup) Use(m Middleware) {
 }
 
 func (g *GemGroup) Group(prefix string, middlewares ...Middleware) *GemGroup {
-	all := make([]Middleware, 0, len(g.middlewares)+len(middlewares))
-	all = append(all, g.middlewares...)
-	all = append(all, middlewares...)
 	return &GemGroup{
 		prefix:      g.prefix + prefix,
 		router:      g.router,
-		middlewares: all,
+		middlewares: slices.Concat(g.middlewares, middlewares),
 	}
 }
 
