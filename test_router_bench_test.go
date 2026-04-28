@@ -57,7 +57,7 @@ func BenchmarkRouter_MiddlewareChain(b *testing.B) {
 	r := newBenchRouter()
 	r.Use(func(next GemHandler) GemHandler {
 		return func(ctx *GemContext) {
-			ctx.Store.Set("key", "value")
+			ctx.Set("key", "value")
 			next(ctx)
 		}
 	})

@@ -60,7 +60,7 @@ func newHTTPRouter() *httprouter.Router {
 func newBaseRouter() *GemRouter {
 	stdout := &rawModeWriter{w: os.Stdout}
 	r := &GemRouter{
-		routerVersion:     "v0.0.18",
+		routerVersion:     "v0.0.19",
 		mux:               newHTTPRouter(),
 		name:              "GemRouter Server",
 		version:           "v0.0.0",
@@ -78,8 +78,10 @@ func newBaseRouter() *GemRouter {
 		methodNotAllowed:  defaultMethodNotAllowed,
 		methodNotFound:    defaultMethodNotFound,
 		Health:            func(ctx *GemContext) { ctx.OK() },
+		ctxPool: sync.Pool{
+			New: func() any { return &GemContext{} },
+		},
 	}
-	r.ctxPool = sync.Pool{New: func() any { return &GemContext{Store: &ContextStore{}} }}
 	return r
 }
 
@@ -288,17 +290,13 @@ func (r *GemRouter) newContext(w http.ResponseWriter, req *http.Request) *GemCon
 }
 
 func (r *GemRouter) releaseContext(ctx *GemContext) {
-	if ctx.Store != nil {
-		ctx.Store.RequestID = ""
-		ctx.Store.UserID = ""
-		clear(ctx.Store.data)
-	}
 	ctx.rwBuf.ResponseWriter = nil
 	ctx.rwBuf.status = 0
 	ctx.rwBuf.written = false
 	ctx.Request = nil
 	ctx.rw = nil
 	ctx.params = nil
+	ctx.store = ctx.store[:0]
 	ctx.Pattern = ""
 	r.ctxPool.Put(ctx)
 }

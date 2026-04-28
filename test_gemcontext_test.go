@@ -299,42 +299,35 @@ func TestFromJSONBodyTooLarge(t *testing.T) {
 // --- Key store ---
 
 func TestSetGet(t *testing.T) {
-	got := make(chan any, 1)
+	got := make(chan string, 1)
 	srv := newTestServer(func(r *GemRouter) {
 		r.GET("/", func(ctx *GemContext) {
 			ctx.Set("user", "mario")
-			val, ok := ctx.Get("user")
-			if !ok {
-				got <- nil
-				return
-			}
-			got <- val
+			got <- ctx.Get("user")
 			ctx.NoContent(http.StatusOK)
 		})
 	})
 	defer srv.Close()
 
 	http.Get(srv.URL + "/") //nolint
-	val := <-got
-	if val != "mario" {
+	if val := <-got; val != "mario" {
 		t.Fatalf("want 'mario', got %v", val)
 	}
 }
 
 func TestGetMissing(t *testing.T) {
-	got := make(chan bool, 1)
+	got := make(chan string, 1)
 	srv := newTestServer(func(r *GemRouter) {
 		r.GET("/", func(ctx *GemContext) {
-			_, ok := ctx.Get("missing")
-			got <- ok
+			got <- ctx.Get("missing")
 			ctx.NoContent(http.StatusOK)
 		})
 	})
 	defer srv.Close()
 
 	http.Get(srv.URL + "/") //nolint
-	if ok := <-got; ok {
-		t.Fatal("want false for missing key, got true")
+	if val := <-got; val != "" {
+		t.Fatalf("want empty string for missing key, got %q", val)
 	}
 }
 

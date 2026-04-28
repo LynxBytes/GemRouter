@@ -14,9 +14,9 @@ const maxRequestBodySize = 4 << 20 // 4 MB
 type GemContext struct {
 	Writer            http.ResponseWriter
 	Request           *http.Request
-	Store             *ContextStore
 	Logger            *slog.Logger
 	Pattern           string
+	store			httprouter.Params
 	params            httprouter.Params
 	rw                *responseWriter
 	rwBuf             responseWriter
@@ -28,7 +28,6 @@ type GemContext struct {
 func NewTestContext(w http.ResponseWriter, r *http.Request) *GemContext {
 	ctx := &GemContext{
 		Request:           r,
-		Store:             &ContextStore{},
 		Logger:            slog.Default(),
 		responseFormatter: defaultResponseFormatter,
 		errorFormatter:    defaultErrorFormatter,
@@ -39,30 +38,30 @@ func NewTestContext(w http.ResponseWriter, r *http.Request) *GemContext {
 	return ctx
 }
 
+func (context *GemContext) SetParam(key, value string) {
+	context.params = append(context.params, httprouter.Param{Key: key, Value: value})
+}
+
 func (context *GemContext) Copy() *GemContext {
-	var storeCopy *ContextStore
-
-	if context.Store != nil {
-		storeCopy = &ContextStore{
-			RequestID: context.Store.RequestID,
-			UserID:    context.Store.UserID,
-			data:      make(map[string]any, len(context.Store.data)),
-		}
-
-		for k, v := range context.Store.data {
-			storeCopy.data[k] = v
-		}
+	cp := &GemContext{
+		Request:           context.Request,
+		Logger:            context.Logger,
+		Pattern:           context.Pattern,
+		trustProxy:        context.trustProxy,
+		responseFormatter: context.responseFormatter,
+		errorFormatter:    context.errorFormatter,
 	}
-
-	return &GemContext{
-		Request: context.Request,
-		Store:   storeCopy,
-		Logger:  context.Logger,
+	if len(context.params) > 0 {
+		cp.params = append(cp.params, context.params...)
 	}
+	if len(context.store) > 0 {
+		cp.store = append(cp.store, context.store...)
+	}
+	return cp
 }
 
 func (context *GemContext) RequestID() string {
-	return context.Store.RequestID
+	return context.store.ByName("request_id")
 }
 
 func (context *GemContext) StatusCode() int {
@@ -115,10 +114,10 @@ func (context *GemContext) Fail(code int, errs ...any) {
 }
 
 var (
-	okBody               = []byte(`{"message":"ok"}` + "\n")
-	notFoundBody         = []byte(`{"error":"not found"}` + "\n")
-	methodNotAllowedBody = []byte(`{"error":"method not allowed"}` + "\n")
-	methodNotFoundBody   = []byte(`{"error":"method not found"}` + "\n")
+	okBody               = []byte(`{"message":"Ok"}` + "\n")
+	notFoundBody         = []byte(`{"error":"Not found"}` + "\n")
+	methodNotAllowedBody = []byte(`{"error":"Method not allowed"}` + "\n")
+	methodNotFoundBody   = []byte(`{"error":"Resource not found"}` + "\n")
 )
 
 var defaultMethodNotAllowed GemHandler = func(ctx *GemContext) {
@@ -165,18 +164,18 @@ func (context *GemContext) Param(key string) string {
 	return context.params.ByName(key)
 }
 
-func (context *GemContext) Set(key string, val any) {
-	if context.Store == nil {
-		context.Store = &ContextStore{}
+func (context *GemContext) Set(key, value string) {
+	for i, p := range context.store {
+		if p.Key == key {
+			context.store[i].Value = value
+			return
+		}
 	}
-	context.Store.Set(key, val)
+	context.store = append(context.store, httprouter.Param{Key: key, Value: value})
 }
 
-func (context *GemContext) Get(key string) (any, bool) {
-	if context.Store == nil {
-		return nil, false
-	}
-	return context.Store.Get(key)
+func (context *GemContext) Get(key string) string {
+	return context.store.ByName(key)
 }
 
 func (context *GemContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {

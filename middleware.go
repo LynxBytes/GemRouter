@@ -38,7 +38,7 @@ func Logger(next GemHandler) GemHandler {
 	return func(ctx *GemContext) {
 		start := time.Now()
 		reqID := newRequestID()
-		ctx.Store.RequestID = reqID
+		ctx.Set("request_id", reqID)
 
 		ctx.Logger.Info("→",
 			slog.String("request_id", reqID),

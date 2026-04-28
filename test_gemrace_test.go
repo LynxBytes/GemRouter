@@ -38,7 +38,7 @@ func TestRaceKeysIsolation(t *testing.T) {
 		r.GET("/echo/:id", func(ctx *GemContext) {
 			id := ctx.Param("id")
 			ctx.Set("id", id)
-			got, _ := ctx.Get("id")
+			got := ctx.Get("id")
 			if got != id {
 				t.Errorf("key bleed: set %q got %q", id, got)
 			}
@@ -111,7 +111,7 @@ func TestRaceCopyInGoroutine(t *testing.T) {
 			ctx.Set("token", "abc123")
 			cp := ctx.Copy()
 			go func() {
-				val, _ := cp.Get("token")
+				val := cp.Get("token")
 				done <- fmt.Sprintf("%v", val)
 			}()
 			ctx.NoContent(http.StatusOK)
@@ -138,7 +138,7 @@ func TestRaceMultipleRoutesConcurrent(t *testing.T) {
 	srv := newTestServer(func(r *GemRouter) {
 		r.GET("/a", func(ctx *GemContext) {
 			ctx.Set("route", "a")
-			got, _ := ctx.Get("route")
+			got := ctx.Get("route")
 			if got != "a" {
 				t.Errorf("route /a got wrong key: %v", got)
 			}
@@ -146,7 +146,7 @@ func TestRaceMultipleRoutesConcurrent(t *testing.T) {
 		})
 		r.GET("/b", func(ctx *GemContext) {
 			ctx.Set("route", "b")
-			got, _ := ctx.Get("route")
+			got := ctx.Get("route")
 			if got != "b" {
 				t.Errorf("route /b got wrong key: %v", got)
 			}
