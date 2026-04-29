@@ -16,7 +16,7 @@ type GemContext struct {
 	Request           *http.Request
 	Logger            *slog.Logger
 	Pattern           string
-	store			httprouter.Params
+	store             httprouter.Params
 	params            httprouter.Params
 	rw                *responseWriter
 	rwBuf             responseWriter

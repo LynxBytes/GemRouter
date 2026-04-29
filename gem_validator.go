@@ -7,6 +7,10 @@ import (
 	"unicode/utf8"
 )
 
+type EnumValidator interface {
+	isValid(enumValue string) bool
+}
+
 type ValidationError struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
@@ -34,6 +38,14 @@ func (v *GemValidator) Check(field string, value any, rules string) *GemValidato
 			break
 		}
 	}
+	return v
+}
+
+func (v *GemValidator) CheckEnum(field string, value string, validator EnumValidator) *GemValidator {
+	if !validator.isValid(value) {
+		v.errors = append(v.errors, ValidationError{Field: field, Message: "Must be a valid value"})
+	}
+
 	return v
 }
 
