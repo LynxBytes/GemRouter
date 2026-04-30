@@ -95,11 +95,9 @@ func Or(rules ...Rule) Rule {
 
 func Null() Rule {
 	return func(value any) *ValidationError {
-		switch value.(type) {
-		case nil:
+		if value == nil {
 			return nil
 		}
-
 		return &ValidationError{
 			Code:    "VALIDATION_ERROR_NULL",
 			Message: "Must be null",
@@ -111,12 +109,11 @@ func Empty() Rule {
 	return func(value any) *ValidationError {
 		switch v := value.(type) {
 		case string:
-			if v != "" {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_EMPTY",
-					Message: "Must be empty",
-				}
+			if v == "" {
+				return nil
 			}
+		default:
+			return nil
 		}
 
 		return &ValidationError{
