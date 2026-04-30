@@ -2,6 +2,7 @@ package gem
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -118,14 +119,23 @@ func Null() Rule {
 
 func NotNull() Rule {
 	return func(value any) *ValidationError {
-		if value != nil {
-			return nil
+		if value == nil {
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_NOTNULL",
+				Message: "Must not be null",
+			}
 		}
 
-		return &ValidationError{
-			Code:    "VALIDATION_ERROR_NOTNULL",
-			Message: "Must be not null",
+		val := reflect.ValueOf(value)
+
+		if val.Kind() == reflect.Ptr && val.IsNil() {
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_NOTNULL",
+				Message: "Must not be null",
+			}
 		}
+
+		return nil
 	}
 }
 
@@ -136,13 +146,20 @@ func Empty() Rule {
 			if v == "" {
 				return nil
 			}
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_EMPTY",
+				Message: "Must be empty",
+			}
+		case nil:
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_EMPTY",
+				Message: "Must be empty",
+			}
 		default:
-			return nil
-		}
-
-		return &ValidationError{
-			Code:    "VALIDATION_ERROR_EMPTY",
-			Message: "Must be empty",
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_EMPTY",
+				Message: "Must be empty",
+			}
 		}
 	}
 }
@@ -154,11 +171,15 @@ func NotEmpty() Rule {
 			if v != "" {
 				return nil
 			}
+		case *string:
+			if v != nil && *v != "" {
+				return nil
+			}
 		}
 
 		return &ValidationError{
 			Code:    "VALIDATION_ERROR_NOTEMPTY",
-			Message: "Must be empty",
+			Message: "Must not be empty",
 		}
 	}
 }
