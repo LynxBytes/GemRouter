@@ -110,6 +110,14 @@ func Null() Rule {
 		if value == nil {
 			return nil
 		}
+
+		switch v := value.(type) {
+		case *string:
+			if v == nil {
+				return nil
+			}
+		}
+
 		return &ValidationError{
 			Code:    "VALIDATION_ERROR_NULL",
 			Message: "Must be null",
@@ -146,20 +154,15 @@ func Empty() Rule {
 			if v == "" {
 				return nil
 			}
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_EMPTY",
-				Message: "Must be empty",
+		case *string:
+			if v != nil && *v == "" {
+				return nil
 			}
-		case nil:
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_EMPTY",
-				Message: "Must be empty",
-			}
-		default:
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_EMPTY",
-				Message: "Must be empty",
-			}
+		}
+
+		return &ValidationError{
+			Code:    "VALIDATION_ERROR_EMPTY",
+			Message: "Must be empty",
 		}
 	}
 }
