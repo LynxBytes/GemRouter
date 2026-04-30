@@ -54,12 +54,19 @@ func (v *Validator) Errors() []ValidationError {
 	return v.errors
 }
 
-func If(cond func() bool, rule Rule) Rule {
+func If(cond func() bool, rules ...Rule) Rule {
 	return func(value any) *ValidationError {
 		if !cond() {
 			return nil
 		}
-		return rule(value)
+
+		for _, rule := range rules {
+			if err := rule(value); err != nil {
+				return err
+			}
+		}
+
+		return nil
 	}
 }
 
