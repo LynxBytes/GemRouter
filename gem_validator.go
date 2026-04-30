@@ -84,18 +84,20 @@ func And(rules ...Rule) Rule {
 
 func Or(rules ...Rule) Rule {
 	return func(value any) *ValidationError {
-		var lastErr *ValidationError
+		var firstErr *ValidationError
 
 		for _, rule := range rules {
 			err := rule(value)
 			if err == nil {
 				return nil
 			}
-			lastErr = err
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 
-		if lastErr != nil {
-			return lastErr
+		if firstErr != nil {
+			return firstErr
 		}
 
 		return &ValidationError{
