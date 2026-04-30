@@ -70,6 +70,17 @@ func If(do bool, rules ...Rule) Rule {
 	}
 }
 
+func And(rules ...Rule) Rule {
+	return func(value any) *ValidationError {
+		for _, rule := range rules {
+			if err := rule(value); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
 func Or(rules ...Rule) Rule {
 	return func(value any) *ValidationError {
 		var lastErr *ValidationError
@@ -105,6 +116,19 @@ func Null() Rule {
 	}
 }
 
+func NotNull() Rule {
+	return func(value any) *ValidationError {
+		if value != nil {
+			return nil
+		}
+
+		return &ValidationError{
+			Code:    "VALIDATION_ERROR_NOTNULL",
+			Message: "Must be not null",
+		}
+	}
+}
+
 func Empty() Rule {
 	return func(value any) *ValidationError {
 		switch v := value.(type) {
@@ -118,6 +142,22 @@ func Empty() Rule {
 
 		return &ValidationError{
 			Code:    "VALIDATION_ERROR_EMPTY",
+			Message: "Must be empty",
+		}
+	}
+}
+
+func NotEmpty() Rule {
+	return func(value any) *ValidationError {
+		switch v := value.(type) {
+		case string:
+			if v != "" {
+				return nil
+			}
+		}
+
+		return &ValidationError{
+			Code:    "VALIDATION_ERROR_NOTEMPTY",
 			Message: "Must be empty",
 		}
 	}
