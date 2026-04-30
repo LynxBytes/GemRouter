@@ -54,9 +54,9 @@ func (v *Validator) Errors() []ValidationError {
 	return v.errors
 }
 
-func If(cond func() bool, rules ...Rule) Rule {
+func If(do bool, rules ...Rule) Rule {
 	return func(value any) *ValidationError {
-		if !cond() {
+		if !do {
 			return nil
 		}
 
