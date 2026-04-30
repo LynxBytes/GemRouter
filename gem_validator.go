@@ -70,6 +70,29 @@ func If(do bool, rules ...Rule) Rule {
 	}
 }
 
+func Or(rules ...Rule) Rule {
+	return func(value any) *ValidationError {
+		var lastErr *ValidationError
+
+		for _, rule := range rules {
+			err := rule(value)
+			if err == nil {
+				return nil
+			}
+			lastErr = err
+		}
+
+		if lastErr != nil {
+			return lastErr
+		}
+
+		return &ValidationError{
+			Code:    "VALIDATION_ERROR_OR_FAILED",
+			Message: "No rule in OR group matched",
+		}
+	}
+}
+
 func Null() Rule {
 	return func(value any) *ValidationError {
 		switch value.(type) {
