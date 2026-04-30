@@ -16,11 +16,19 @@ type ValidationError struct {
 type Rule func(value any) string
 
 type Validator struct {
-	errors []ValidationError
+	errors         []ValidationError
+	EmailValidator validators.EmailChecker
 }
 
 func NewValidator() *Validator {
-	return &Validator{}
+	return &Validator{
+		EmailValidator: validators.NewEmailValidator(),
+	}
+}
+
+func (v *Validator) SetEmailValidator(ev validators.EmailChecker) *Validator {
+	v.EmailValidator = ev
+	return v
 }
 
 func (v *Validator) Check(field string, value any, rules ...Rule) *Validator {
