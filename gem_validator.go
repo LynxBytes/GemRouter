@@ -10,10 +10,11 @@ import (
 
 type ValidationError struct {
 	Field   string `json:"field"`
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-type Rule func(value any) string
+type Rule func(value any) *ValidationError
 
 type Validator struct {
 	errors         []ValidationError
@@ -33,10 +34,11 @@ func (v *Validator) SetEmailValidator(ev validators.EmailChecker) *Validator {
 
 func (v *Validator) Check(field string, value any, rules ...Rule) *Validator {
 	for _, rule := range rules {
-		if msg := rule(value); msg != "" {
+		if err := rule(value); err != nil {
 			v.errors = append(v.errors, ValidationError{
 				Field:   field,
-				Message: msg,
+				Code:    err.Code,
+				Message: err.Message,
 			})
 			break
 		}
@@ -52,88 +54,135 @@ func (v *Validator) Errors() []ValidationError {
 	return v.errors
 }
 
+func If(cond func() bool, rule Rule) Rule {
+	return func(value any) *ValidationError {
+		if !cond() {
+			return nil
+		}
+		return rule(value)
+	}
+}
+
 func Required() Rule {
-	return func(value any) string {
+	return func(value any) *ValidationError {
 		switch v := value.(type) {
 		case string:
 			if v == "" {
-				return "Is required"
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_REQUIRED",
+					Message: "Is required",
+				}
 			}
 		case int:
 			if v == 0 {
-				return "Is required"
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_REQUIRED",
+					Message: "Is required",
+				}
 			}
 		case float64:
 			if v == 0 {
-				return "Is required"
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_REQUIRED",
+					Message: "Is required",
+				}
 			}
 		case bool:
-			return "" // false es válido
+			return nil
 		case nil:
-			return "Is required"
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_REQUIRED",
+				Message: "Is required",
+			}
 		}
-		return ""
+		return nil
 	}
 }
 
 func Min(n int) Rule {
-	return func(value any) string {
+	return func(value any) *ValidationError {
 		switch v := value.(type) {
 		case string:
 			if utf8.RuneCountInString(v) < n {
-				return fmt.Sprintf("Must be at least %d characters", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MIN",
+					Message: fmt.Sprintf("Must be at least %d characters", n),
+				}
 			}
 		case int:
 			if v < n {
-				return fmt.Sprintf("Must be at least %d", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MIN",
+					Message: fmt.Sprintf("Must be at least %d", n),
+				}
 			}
 		case float64:
 			if v < float64(n) {
-				return fmt.Sprintf("Must be at least %d", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MIN",
+					Message: fmt.Sprintf("Must be at least %d", n),
+				}
 			}
 		}
-		return ""
+		return nil
 	}
 }
 
 func Max(n int) Rule {
-	return func(value any) string {
+	return func(value any) *ValidationError {
 		switch v := value.(type) {
 		case string:
 			if utf8.RuneCountInString(v) > n {
-				return fmt.Sprintf("Must be at most %d characters", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MAX",
+					Message: fmt.Sprintf("Must be at most %d characters", n),
+				}
 			}
 		case int:
 			if v > n {
-				return fmt.Sprintf("Must be at most %d", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MAX",
+					Message: fmt.Sprintf("Must be at most %d", n),
+				}
 			}
 		case float64:
 			if v > float64(n) {
-				return fmt.Sprintf("Must be at most %d", n)
+				return &ValidationError{
+					Code:    "VALIDATION_ERROR_MAX",
+					Message: fmt.Sprintf("Must be at most %d", n),
+				}
 			}
 		}
-		return ""
+		return nil
 	}
 }
 
 func Len(n int) Rule {
-	return func(value any) string {
+	return func(value any) *ValidationError {
 		s, ok := value.(string)
 		if !ok {
-			return ""
+			return nil
 		}
+
 		if utf8.RuneCountInString(s) != n {
-			return fmt.Sprintf("Must be exactly %d characters", n)
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_LEN",
+				Message: fmt.Sprintf("Must be exactly %d characters", n),
+			}
 		}
-		return ""
+
+		return nil
 	}
 }
 
 func Email(ev validators.EmailChecker) Rule {
-	return func(value any) string {
+	return func(value any) *ValidationError {
 		s, ok := value.(string)
 		if !ok {
-			return "Must be a valid email"
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_EMAIL",
+				Message: "Must be a valid email",
+			}
 		}
 
 		if ev == nil {
@@ -141,18 +190,24 @@ func Email(ev validators.EmailChecker) Rule {
 		}
 
 		if !ev.IsValid(strings.TrimSpace(s)) {
-			return "Must be a valid email"
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_EMAIL",
+				Message: "Must be a valid email",
+			}
 		}
 
-		return ""
+		return nil
 	}
 }
 
 func Enum(valid func() bool, message string) Rule {
-	return func(_ any) string {
+	return func(_ any) *ValidationError {
 		if !valid() {
-			return message
+			return &ValidationError{
+				Code:    "VALIDATION_ERROR_ENUM",
+				Message: message,
+			}
 		}
-		return ""
+		return nil
 	}
 }
