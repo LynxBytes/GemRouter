@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/LynxBytes/GemRouter/validators"
 )
 
 type ValidationError struct {
@@ -13,16 +15,15 @@ type ValidationError struct {
 
 type Rule func(value any) string
 
-type GemValidator struct {
-	errors       []ValidationError
-	emailChecker func(string) bool
+type Validator struct {
+	errors []ValidationError
 }
 
-func NewValidator() *GemValidator {
-	return &GemValidator{}
+func NewValidator() *Validator {
+	return &Validator{}
 }
 
-func (v *GemValidator) Check(field string, value any, rules ...Rule) *GemValidator {
+func (v *Validator) Check(field string, value any, rules ...Rule) *Validator {
 	for _, rule := range rules {
 		if msg := rule(value); msg != "" {
 			v.errors = append(v.errors, ValidationError{
@@ -35,17 +36,12 @@ func (v *GemValidator) Check(field string, value any, rules ...Rule) *GemValidat
 	return v
 }
 
-func (v *GemValidator) Valid() bool {
+func (v *Validator) Valid() bool {
 	return len(v.errors) == 0
 }
 
-func (v *GemValidator) Errors() []ValidationError {
+func (v *Validator) Errors() []ValidationError {
 	return v.errors
-}
-
-func (v *GemValidator) SetEmailChecker(fn func(string) bool) *GemValidator {
-	v.emailChecker = fn
-	return v
 }
 
 func Required() Rule {
@@ -125,28 +121,18 @@ func Len(n int) Rule {
 	}
 }
 
-func Email(checker ...func(string) bool) Rule {
+func Email(ev validators.EmailChecker) Rule {
 	return func(value any) string {
 		s, ok := value.(string)
 		if !ok {
 			return "Must be a valid email"
 		}
 
-		// custom override
-		if len(checker) > 0 && checker[0] != nil {
-			if !checker[0](s) {
-				return "Must be a valid email"
-			}
-			return ""
+		if ev == nil {
+			ev = validators.NewEmailValidator()
 		}
 
-		at := strings.LastIndex(s, "@")
-		if at <= 0 || at == len(s)-1 {
-			return "Must be a valid email"
-		}
-
-		domain := s[at+1:]
-		if !strings.Contains(domain, ".") || strings.HasSuffix(domain, ".") {
+		if !ev.IsValid(strings.TrimSpace(s)) {
 			return "Must be a valid email"
 		}
 
