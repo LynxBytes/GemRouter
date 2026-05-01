@@ -194,32 +194,24 @@ func Required() Rule {
 		switch v := value.(type) {
 		case string:
 			if v == "" {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_REQUIRED",
-					Message: "Is required",
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_REQUIRED", Message: "Is required"}
+			}
+		case *string:
+			if v == nil || *v == "" {
+				return &ValidationError{Code: "VALIDATION_ERROR_REQUIRED", Message: "Is required"}
 			}
 		case int:
 			if v == 0 {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_REQUIRED",
-					Message: "Is required",
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_REQUIRED", Message: "Is required"}
 			}
 		case float64:
 			if v == 0 {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_REQUIRED",
-					Message: "Is required",
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_REQUIRED", Message: "Is required"}
 			}
 		case bool:
 			return nil
 		case nil:
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_REQUIRED",
-				Message: "Is required",
-			}
+			return &ValidationError{Code: "VALIDATION_ERROR_REQUIRED", Message: "Is required"}
 		}
 		return nil
 	}
@@ -230,24 +222,19 @@ func Min(n int) Rule {
 		switch v := value.(type) {
 		case string:
 			if utf8.RuneCountInString(v) < n {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MIN",
-					Message: fmt.Sprintf("Must be at least %d characters", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MIN", Message: fmt.Sprintf("Must be at least %d characters", n)}
+			}
+		case *string:
+			if v == nil || utf8.RuneCountInString(*v) < n {
+				return &ValidationError{Code: "VALIDATION_ERROR_MIN", Message: fmt.Sprintf("Must be at least %d characters", n)}
 			}
 		case int:
 			if v < n {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MIN",
-					Message: fmt.Sprintf("Must be at least %d", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MIN", Message: fmt.Sprintf("Must be at least %d", n)}
 			}
 		case float64:
 			if v < float64(n) {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MIN",
-					Message: fmt.Sprintf("Must be at least %d", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MIN", Message: fmt.Sprintf("Must be at least %d", n)}
 			}
 		}
 		return nil
@@ -259,24 +246,19 @@ func Max(n int) Rule {
 		switch v := value.(type) {
 		case string:
 			if utf8.RuneCountInString(v) > n {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MAX",
-					Message: fmt.Sprintf("Must be at most %d characters", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MAX", Message: fmt.Sprintf("Must be at most %d characters", n)}
+			}
+		case *string:
+			if v != nil && utf8.RuneCountInString(*v) > n {
+				return &ValidationError{Code: "VALIDATION_ERROR_MAX", Message: fmt.Sprintf("Must be at most %d characters", n)}
 			}
 		case int:
 			if v > n {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MAX",
-					Message: fmt.Sprintf("Must be at most %d", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MAX", Message: fmt.Sprintf("Must be at most %d", n)}
 			}
 		case float64:
 			if v > float64(n) {
-				return &ValidationError{
-					Code:    "VALIDATION_ERROR_MAX",
-					Message: fmt.Sprintf("Must be at most %d", n),
-				}
+				return &ValidationError{Code: "VALIDATION_ERROR_MAX", Message: fmt.Sprintf("Must be at most %d", n)}
 			}
 		}
 		return nil
@@ -285,30 +267,39 @@ func Max(n int) Rule {
 
 func Len(n int) Rule {
 	return func(value any) *ValidationError {
-		s, ok := value.(string)
-		if !ok {
+		var s string
+		switch v := value.(type) {
+		case string:
+			s = v
+		case *string:
+			if v == nil {
+				return &ValidationError{Code: "VALIDATION_ERROR_LEN", Message: fmt.Sprintf("Must be exactly %d characters", n)}
+			}
+			s = *v
+		default:
 			return nil
 		}
 
 		if utf8.RuneCountInString(s) != n {
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_LEN",
-				Message: fmt.Sprintf("Must be exactly %d characters", n),
-			}
+			return &ValidationError{Code: "VALIDATION_ERROR_LEN", Message: fmt.Sprintf("Must be exactly %d characters", n)}
 		}
-
 		return nil
 	}
 }
 
 func Email(ev validators.EmailChecker) Rule {
 	return func(value any) *ValidationError {
-		s, ok := value.(string)
-		if !ok {
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_EMAIL",
-				Message: "Must be a valid email",
+		var s string
+		switch v := value.(type) {
+		case string:
+			s = v
+		case *string:
+			if v == nil {
+				return &ValidationError{Code: "VALIDATION_ERROR_EMAIL", Message: "Must be a valid email"}
 			}
+			s = *v
+		default:
+			return &ValidationError{Code: "VALIDATION_ERROR_EMAIL", Message: "Must be a valid email"}
 		}
 
 		if ev == nil {
@@ -316,12 +307,8 @@ func Email(ev validators.EmailChecker) Rule {
 		}
 
 		if !ev.IsValid(strings.TrimSpace(s)) {
-			return &ValidationError{
-				Code:    "VALIDATION_ERROR_EMAIL",
-				Message: "Must be a valid email",
-			}
+			return &ValidationError{Code: "VALIDATION_ERROR_EMAIL", Message: "Must be a valid email"}
 		}
-
 		return nil
 	}
 }
