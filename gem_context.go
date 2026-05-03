@@ -3,7 +3,9 @@ package gem
 import (
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 
 	"github.com/bytedance/sonic"
 	"github.com/julienschmidt/httprouter"
@@ -204,4 +206,23 @@ func (context *GemContext) DeleteCookie(name string) {
 		Value:  "",
 		MaxAge: -1,
 	})
+}
+
+func (context *GemContext) getClientIP() string {
+	ip := context.Request.Header.Get("X-Forwarded-For")
+	if ip != "" {
+		ips := strings.Split(ip, ",")
+		return strings.TrimSpace(ips[0])
+	}
+
+	ip, _, err := net.SplitHostPort(context.Request.RemoteAddr)
+	if err != nil {
+		return context.Request.RemoteAddr
+	}
+
+	return ip
+}
+
+func (context *GemContext) getUserAgent() string {
+	return context.Request.Header.Get("User-Agent")
 }
