@@ -1,6 +1,7 @@
 package gem
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net"
@@ -156,6 +157,10 @@ func (context *GemContext) Header(key string) string {
 
 func (context *GemContext) Method() string {
 	return context.Request.Method
+}
+
+func (context *GemContext) Context() context.Context {
+	return context.Request.Context()
 }
 
 func (context *GemContext) Path() string {

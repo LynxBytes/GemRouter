@@ -60,7 +60,7 @@ func newHTTPRouter() *httprouter.Router {
 func newBaseRouter() *GemRouter {
 	stdout := &rawModeWriter{w: os.Stdout}
 	r := &GemRouter{
-		routerVersion:     "v0.0.40",
+		routerVersion:     "v0.0.41",
 		mux:               newHTTPRouter(),
 		name:              "GemRouter Server",
 		version:           "v0.0.0",
