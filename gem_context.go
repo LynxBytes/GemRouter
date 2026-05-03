@@ -208,7 +208,7 @@ func (context *GemContext) DeleteCookie(name string) {
 	})
 }
 
-func (context *GemContext) getClientIP() string {
+func (context *GemContext) GetClientIP() string {
 	ip := context.Request.Header.Get("X-Forwarded-For")
 	if ip != "" {
 		ips := strings.Split(ip, ",")
@@ -223,6 +223,6 @@ func (context *GemContext) getClientIP() string {
 	return ip
 }
 
-func (context *GemContext) getUserAgent() string {
+func (context *GemContext) GetUserAgent() string {
 	return context.Request.Header.Get("User-Agent")
 }
